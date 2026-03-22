@@ -85,9 +85,9 @@ public partial class MainViewModel : ObservableObject
             {
                 LockMethod.Password      => "Enter your password to unlock.",
                 LockMethod.WindowsHello  => "Verify with Windows Hello or PIN to unlock.",
-                LockMethod.OAuthGoogle   => $"Sign in with Google to unlock.",
-                LockMethod.OAuthMicrosoft => $"Sign in with Microsoft to unlock.",
-                LockMethod.OAuthFacebook => $"Sign in with Facebook to unlock.",
+                LockMethod.OAuthGoogle   => "Sign in with Google to unlock.",
+                LockMethod.OAuthMicrosoft => "Sign in with Microsoft to unlock.",
+                LockMethod.OAuthFacebook => "Sign in with Facebook to unlock.",
                 _                        => "Unlock to view codes."
             };
         }
@@ -160,6 +160,7 @@ public partial class MainViewModel : ObservableObject
     private void Unlock()
     {
         IsUnlocked = true;
+        ResetIdleTimer();
         _store.Load();
 
         Accounts.Clear();
@@ -177,6 +178,9 @@ public partial class MainViewModel : ObservableObject
         {
             vm.Refresh();
         }
+
+        // Check idle timeout for auto-lock
+        CheckIdleTimeout();
     }
 
     [RelayCommand]
@@ -292,7 +296,6 @@ public partial class MainViewModel : ObservableObject
 
         if (vm.IsShared)
         {
-            // Remove from shared vault
             var vault = _openVaults.FirstOrDefault(v => v.VaultName == vm.VaultName);
             vault?.RemoveAccount(vm.Id);
         }
@@ -374,7 +377,6 @@ public partial class MainViewModel : ObservableObject
 
         if (dlg.ShowDialog() != true) return;
 
-        // Check if already open
         if (_openVaults.Any(v => string.Equals(v.FilePath, dlg.FileName, StringComparison.OrdinalIgnoreCase)))
         {
             StatusMessage = "That vault is already open.";
@@ -411,7 +413,6 @@ public partial class MainViewModel : ObservableObject
         var vault = _openVaults.FirstOrDefault(v => v.VaultName == vaultName);
         if (vault == null) return;
 
-        // Remove vault accounts from display
         var toRemove = Accounts.Where(a => a.VaultName == vaultName).ToList();
         foreach (var vm in toRemove)
             Accounts.Remove(vm);
@@ -430,22 +431,17 @@ public partial class MainViewModel : ObservableObject
         OpenVaultNames.Add(vault.VaultName);
         AddTargetOptions.Add(vault.VaultName);
 
-        // Add vault accounts to display
         foreach (var acct in vault.Accounts)
             Accounts.Add(new AccountViewModel(acct));
 
-        // Listen for external changes (teammate edits)
         vault.ExternalChange += () =>
         {
-            // Marshal to UI thread
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
-                // Remove old vault accounts
                 var old = Accounts.Where(a => a.VaultName == vault.VaultName).ToList();
                 foreach (var vm in old)
                     Accounts.Remove(vm);
 
-                // Add refreshed accounts
                 foreach (var acct in vault.Accounts)
                     Accounts.Add(new AccountViewModel(acct));
 
@@ -464,7 +460,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             MinimizeWindow?.Invoke();
-            await Task.Delay(300); // allow minimize animation to complete before screenshot
+            await Task.Delay(300);
 
             var uri = QrScanner.DecodeFromScreen();
             if (uri != null)
@@ -563,7 +559,6 @@ public partial class MainViewModel : ObservableObject
             IsAddPanelVisible = false;
     }
 
-    /// <returns>true if added, false if skipped as a duplicate.</returns>
     private bool AddSingleOtpUri(string uri)
     {
         var parsed = AccountStore.ParseOtpAuthUri(uri);
@@ -619,9 +614,6 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = $"Moved {personal.Issuer} to '{vaultName}'.";
     }
 
-    /// <summary>
-    /// Decrypts a vault account's plaintext secret and moves it to the personal store (DPAPI-encrypted).
-    /// </summary>
     public void MoveAccountToLocal(AccountViewModel accountVm)
     {
         if (!accountVm.IsShared) return;
@@ -736,14 +728,12 @@ public partial class MainViewModel : ObservableObject
         var (from, to) = args;
         if (from < 0 || from >= Accounts.Count || to < 0 || to >= Accounts.Count) return;
 
-        // Only allow reorder within the same source (personal or same vault)
         var fromVault = Accounts[from].VaultName;
         var toVault = Accounts[to].VaultName;
         if (fromVault != toVault) return;
 
         if (fromVault == null)
         {
-            // Personal accounts — use store
             _store.Move(from, to);
         }
 

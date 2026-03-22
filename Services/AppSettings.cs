@@ -81,6 +81,26 @@ public static class AppSettings
     }
 
     /// <summary>
+    /// Auto-lock timeout in minutes. 0 = disabled. Default: 5.
+    /// </summary>
+    public static int AutoLockTimeoutMinutes
+    {
+        get
+        {
+            EnsureLoaded();
+            if (_settings.TryGetValue("AutoLockTimeoutMinutes", out var v) && int.TryParse(v, out var m))
+                return m;
+            return 5; // default 5 minutes
+        }
+        set
+        {
+            EnsureLoaded();
+            _settings["AutoLockTimeoutMinutes"] = value.ToString();
+            Save();
+        }
+    }
+
+    /// <summary>
     /// Recently opened shared vault file paths (pipe-delimited).
     /// Stored as paths only — passwords are never persisted.
     /// </summary>
