@@ -8,14 +8,14 @@
         WindowStartupLocation="CenterScreen"
         Background="#1e1e2e" Foreground="#cdd6f4"
         Icon="shield.ico"
-        WindowStyle="None"
         ResizeMode="CanResize"
         StateChanged="OnStateChanged"
         Closing="OnClosing">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="46" ResizeBorderThickness="5"
-                      CornerRadius="0" GlassFrameThickness="0"/>
+                      CornerRadius="0" GlassFrameThickness="-1"
+                      UseAeroCaptionButtons="False"/>
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
@@ -59,9 +59,9 @@
         </Style>
 
         <Style x:Key="MenuButton" TargetType="Button" BasedOn="{StaticResource SubtleButton}">
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Padding" Value="10,7"/>
-            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Margin" Value="0,1"/>
             <Setter Property="FontSize" Value="12"/>
         </Style>
 
@@ -139,7 +139,7 @@
             </tb:TaskbarIcon.ContextMenu>
         </tb:TaskbarIcon>
 
-        <!-- Lock Screen (Windows Hello) -->
+        <!-- Lock Screen -->
         <Grid x:Name="LockScreen">
             <Grid.Style>
                 <Style TargetType="Grid">
@@ -151,16 +151,105 @@
                     </Style.Triggers>
                 </Style>
             </Grid.Style>
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="280">
                 <TextBlock Text="&#128274;" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,12"/>
                 <TextBlock Text="WardLock is locked" FontSize="18" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                <TextBlock Text="Verify your identity with Windows Hello" FontSize="12"
-                           Foreground="#a6adc8" HorizontalAlignment="Center" Margin="0,0,0,16"/>
-                <Button Content="&#128275; Unlock" Style="{StaticResource AccentButton}"
-                        FontSize="14" Padding="24,10"
-                        HorizontalAlignment="Center"
-                        Command="{Binding RequestUnlockCommand}"/>
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBlock Text="{Binding StatusMessage}" FontSize="12"
+                           Foreground="#a6adc8" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,20"/>
+
+                <!-- Password entry (visible when method=Password) -->
+                <StackPanel x:Name="LockPasswordPanel" Margin="0,0,0,12">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="Password">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <PasswordBox x:Name="LockPasswordBox" FontSize="14" Padding="8,6"
+                                 Background="#313244" Foreground="#cdd6f4" BorderBrush="#45475a"
+                                 CaretBrush="#cdd6f4" Margin="0,0,0,8"
+                                 KeyDown="OnLockPasswordKeyDown"/>
+                    <Button Content="&#128275; Unlock" Style="{StaticResource AccentButton}"
+                            FontSize="14" Padding="24,10" HorizontalAlignment="Stretch"
+                            Click="OnUnlockWithPasswordClick"/>
+                </StackPanel>
+
+                <!-- Windows Hello button -->
+                <Button Content="&#128275; Unlock with Windows Hello" FontSize="14" Padding="24,10"
+                        HorizontalAlignment="Center" Command="{Binding RequestUnlockCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource AccentButton}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="WindowsHello">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <!-- OAuth buttons -->
+                <Button Content="&#128275; Sign in with Google" FontSize="14" Padding="24,10"
+                        HorizontalAlignment="Center" Command="{Binding RequestUnlockCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource AccentButton}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthGoogle">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="&#128275; Sign in with Microsoft" FontSize="14" Padding="24,10"
+                        HorizontalAlignment="Center" Command="{Binding RequestUnlockCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource AccentButton}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthMicrosoft">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="&#128275; Sign in with Facebook" FontSize="14" Padding="24,10"
+                        HorizontalAlignment="Center" Command="{Binding RequestUnlockCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource AccentButton}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthFacebook">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <TextBlock Text="{Binding OAuthDisplayName, StringFormat='Signed in as: {0}'}"
+                           FontSize="11" Foreground="#585b70" HorizontalAlignment="Center"
+                           Margin="0,8,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding OAuthDisplayName.Length}" Value="0">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
         </Grid>
 
@@ -203,43 +292,115 @@
             <!-- Menu Popup -->
             <Popup x:Name="MenuPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=MenuBtn}"
                    StaysOpen="False" AllowsTransparency="True">
-                <Border Background="#313244" CornerRadius="6" Padding="6"
+                <Border Background="#313244" CornerRadius="6" Padding="8"
                         BorderBrush="#45475a" BorderThickness="1">
-                    <StackPanel Width="200">
-                        <TextBlock Text="QR Scanning" FontSize="10" Foreground="#585b70"
-                                   Margin="10,4,0,2" FontWeight="SemiBold"/>
-                        <Button Content="&#128247; Scan QR from Screen" Style="{StaticResource MenuButton}"
-                                Command="{Binding ScanQrFromScreenCommand}"/>
-                        <Button Content="&#128193; Scan QR from File" Style="{StaticResource MenuButton}"
-                                Command="{Binding ScanQrFromFileCommand}"/>
-                        <Button Content="&#128203; Scan QR from Clipboard" Style="{StaticResource MenuButton}"
-                                Command="{Binding ScanQrFromClipboardImageCommand}"/>
+                    <StackPanel Width="236">
 
-                        <Separator Background="#45475a" Margin="4,6"/>
-                        <TextBlock Text="Backup" FontSize="10" Foreground="#585b70"
-                                   Margin="10,4,0,2" FontWeight="SemiBold"/>
-                        <Button Content="&#128229; Export Backup" Style="{StaticResource MenuButton}"
-                                Command="{Binding ExportAccountsCommand}"/>
-                        <Button Content="&#128228; Import Backup" Style="{StaticResource MenuButton}"
-                                Command="{Binding ImportAccountsCommand}"/>
+                        <!-- QR Scanning -->
+                        <TextBlock Text="QR SCANNING" FontSize="9" FontWeight="Bold"
+                                   Foreground="#585b70" Margin="8,4,8,4"/>
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding ScanQrFromScreenCommand}">
+                            <DockPanel>
+                                <TextBlock Text="&#128247;" Width="20" TextAlignment="Center" VerticalAlignment="Center"/>
+                                <TextBlock Text="Scan from Screen" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding ScanQrFromFileCommand}">
+                            <DockPanel>
+                                <TextBlock Text="&#128193;" Width="20" TextAlignment="Center" VerticalAlignment="Center"/>
+                                <TextBlock Text="Scan from File" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding ScanQrFromClipboardImageCommand}">
+                            <DockPanel>
+                                <TextBlock Text="&#128203;" Width="20" TextAlignment="Center" VerticalAlignment="Center"/>
+                                <TextBlock Text="Scan from Clipboard" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
 
-                        <Separator Background="#45475a" Margin="4,6"/>
-                        <TextBlock Text="Security" FontSize="10" Foreground="#585b70"
-                                   Margin="10,4,0,2" FontWeight="SemiBold"/>
-                        <Button Command="{Binding ToggleWindowsHelloCommand}">
-                            <Button.Content>
-                                <TextBlock>
+                        <Separator Background="#45475a" Margin="4,8"/>
+
+                        <!-- Backup -->
+                        <TextBlock Text="BACKUP" FontSize="9" FontWeight="Bold"
+                                   Foreground="#585b70" Margin="8,0,8,4"/>
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding ExportAccountsCommand}">
+                            <DockPanel>
+                                <TextBlock Text="&#128229;" Width="20" TextAlignment="Center" VerticalAlignment="Center"/>
+                                <TextBlock Text="Export Backup" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding ImportAccountsCommand}">
+                            <DockPanel>
+                                <TextBlock Text="&#128228;" Width="20" TextAlignment="Center" VerticalAlignment="Center"/>
+                                <TextBlock Text="Import Backup" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+
+                        <Separator Background="#45475a" Margin="4,8"/>
+
+                        <!-- Security -->
+                        <TextBlock Text="SECURITY" FontSize="9" FontWeight="Bold"
+                                   Foreground="#585b70" Margin="8,0,8,4"/>
+
+                        <!-- No lock -->
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding SetLockNoneCommand}">
+                            <DockPanel>
+                                <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="&#128275; Enable Windows Hello Lock"/>
+                                            <Setter Property="Text" Value="&#9675;"/>
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding WindowsHelloEnabled}" Value="True">
-                                                    <Setter Property="Text" Value="&#128274; Disable Windows Hello Lock"/>
+                                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="None">
+                                                    <Setter Property="Text" Value="&#10003;"/>
+                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
+                                <TextBlock Text="No lock" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+
+                        <!-- Password -->
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding SetLockPasswordCommand}">
+                            <DockPanel>
+                                <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="&#9675;"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="Password">
+                                                    <Setter Property="Text" Value="&#10003;"/>
+                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="Password" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+
+                        <!-- Windows Hello / PIN -->
+                        <Button Command="{Binding SetLockWindowsHelloCommand}">
+                            <Button.Content>
+                                <DockPanel>
+                                    <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="&#9675;"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ActiveLockMethod}" Value="WindowsHello">
+                                                        <Setter Property="Text" Value="&#10003;"/>
+                                                        <Setter Property="Foreground" Value="#a6e3a1"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="Windows Hello / PIN" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </DockPanel>
                             </Button.Content>
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource MenuButton}">
@@ -253,34 +414,106 @@
                             </Button.Style>
                         </Button>
 
-                        <Separator Background="#45475a" Margin="4,6"/>
-                        <TextBlock Text="Shared Vaults" FontSize="10" Foreground="#585b70"
-                                   Margin="10,4,0,2" FontWeight="SemiBold"/>
-                        <Button Content="&#128194; Create Shared Vault" Style="{StaticResource MenuButton}"
-                                Command="{Binding CreateSharedVaultCommand}"/>
-                        <Button Content="&#128194; Open Shared Vault" Style="{StaticResource MenuButton}"
-                                Command="{Binding OpenSharedVaultCommand}"/>
+                        <!-- OAuth providers -->
+                        <Button Style="{StaticResource MenuButton}"
+                                Command="{Binding SetLockOAuthCommand}" CommandParameter="Google">
+                            <DockPanel>
+                                <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="&#9675;"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthGoogle">
+                                                    <Setter Property="Text" Value="&#10003;"/>
+                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="Sign in with Google" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuButton}"
+                                Command="{Binding SetLockOAuthCommand}" CommandParameter="Microsoft">
+                            <DockPanel>
+                                <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="&#9675;"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthMicrosoft">
+                                                    <Setter Property="Text" Value="&#10003;"/>
+                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="Sign in with Microsoft" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuButton}"
+                                Command="{Binding SetLockOAuthCommand}" CommandParameter="Facebook">
+                            <DockPanel>
+                                <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="&#9675;"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthFacebook">
+                                                    <Setter Property="Text" Value="&#10003;"/>
+                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="Sign in with Facebook" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+
+                        <Separator Background="#45475a" Margin="4,8"/>
+
+                        <!-- Shared Vaults -->
+                        <TextBlock Text="SHARED VAULTS" FontSize="9" FontWeight="Bold"
+                                   Foreground="#585b70" Margin="8,0,8,4"/>
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding CreateSharedVaultCommand}">
+                            <DockPanel>
+                                <TextBlock Text="+" Width="20" TextAlignment="Center" VerticalAlignment="Center"
+                                           FontWeight="Bold" FontSize="14"/>
+                                <TextBlock Text="Create Vault" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding OpenSharedVaultCommand}">
+                            <DockPanel>
+                                <TextBlock Text="&#128194;" Width="20" TextAlignment="Center" VerticalAlignment="Center"/>
+                                <TextBlock Text="Open Vault" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
                         <ItemsControl ItemsSource="{Binding OpenVaultNames}" Margin="0,2,0,0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <DockPanel Margin="4,1">
+                                    <DockPanel Margin="2,1" Height="28">
                                         <Button DockPanel.Dock="Right" Content="&#10005;" FontSize="9"
                                                 Foreground="#f38ba8" Background="Transparent"
-                                                BorderThickness="0" Cursor="Hand" Padding="4,2"
+                                                BorderThickness="0" Cursor="Hand" Padding="6,4"
                                                 Command="{Binding DataContext.CloseSharedVaultCommand,
                                                     RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}"/>
-                                        <TextBlock Text="{Binding StringFormat='  &#128279; {0}'}"
+                                        <TextBlock Text="{Binding StringFormat='&#128279;  {0}'}"
                                                    FontSize="11" Foreground="#a6e3a1"
-                                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                                   VerticalAlignment="Center" Margin="14,0,0,0"/>
                                     </DockPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <Separator Background="#45475a" Margin="4,6"/>
-                        <TextBlock Text="Ctrl+Shift+A — global hotkey" FontSize="10"
-                                   Foreground="#585b70" Margin="10,4,10,4" FontStyle="Italic"/>
+                        <Separator Background="#45475a" Margin="4,8"/>
+
+                        <TextBlock Text="Ctrl+Shift+A  —  show / hide" FontSize="10"
+                                   Foreground="#585b70" Margin="8,0,8,6" FontStyle="Italic"
+                                   HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
             </Popup>
@@ -375,7 +608,7 @@
                                                  Foreground="#f9e2af" Background="#45475a"/>
                                 </StackPanel>
 
-                                <!-- Move to vault (personal accounts only) -->
+                                <!-- Move to vault (personal → vault) -->
                                 <Button Grid.Column="3" Content="&#8594;" FontSize="12"
                                         VerticalAlignment="Center" Margin="4,0,0,0"
                                         ToolTip="Move to shared vault"
@@ -393,13 +626,30 @@
                                     </Button.Style>
                                 </Button>
 
+                                <!-- Move to local (vault → personal) -->
+                                <Button Grid.Column="3" Content="&#8592;" FontSize="12"
+                                        VerticalAlignment="Center" Margin="4,0,0,0"
+                                        ToolTip="Move to Personal"
+                                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Click="OnMoveToLocalClick">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource SubtleButton}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsShared}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+
                                 <!-- Delete -->
                                 <Button Grid.Column="4" Content="&#10005;" FontSize="12"
                                         Style="{StaticResource SubtleButton}"
                                         Foreground="#f38ba8" VerticalAlignment="Center"
-                                        Command="{Binding DataContext.RemoveAccountCommand,
-                                            RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}"/>
+                                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Click="OnDeleteClick"/>
                             </Grid>
                         </Border>
                     </DataTemplate>

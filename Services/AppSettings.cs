@@ -3,6 +3,16 @@ using System.Text.Json;
 
 namespace WardLock.Services;
 
+public enum LockMethod
+{
+    None,           // No lock — app opens directly
+    Password,       // App-level password (PBKDF2 hash)
+    WindowsHello,   // Windows Hello: fingerprint, face, or PIN
+    OAuthGoogle,
+    OAuthMicrosoft,
+    OAuthFacebook,
+}
+
 /// <summary>
 /// Persists app-level settings (not secrets) to a JSON file.
 /// </summary>
@@ -106,5 +116,49 @@ public static class AppSettings
         var paths = RecentVaultPaths;
         paths.Remove(path);
         RecentVaultPaths = paths;
+    }
+
+    public static LockMethod ActiveLockMethod
+    {
+        get
+        {
+            EnsureLoaded();
+            if (_settings.TryGetValue("LockMethod", out var v) &&
+                Enum.TryParse<LockMethod>(v, out var m))
+                return m;
+
+            // Migrate legacy WindowsHello setting
+            if (_settings.TryGetValue("WindowsHelloEnabled", out var wh) && wh == "true")
+                return LockMethod.WindowsHello;
+
+            return LockMethod.None;
+        }
+        set
+        {
+            EnsureLoaded();
+            _settings["LockMethod"] = value.ToString();
+            Save();
+        }
+    }
+
+    /// <summary>PBKDF2 hash of the app lock password: "base64salt:base64hash".</summary>
+    public static string? LockPasswordHash
+    {
+        get { EnsureLoaded(); return _settings.TryGetValue("LockPasswordHash", out var v) ? v : null; }
+        set { EnsureLoaded(); if (value is null) _settings.Remove("LockPasswordHash"); else _settings["LockPasswordHash"] = value; Save(); }
+    }
+
+    /// <summary>Subject identifier (sub) stored after successful OAuth setup.</summary>
+    public static string? OAuthSub
+    {
+        get { EnsureLoaded(); return _settings.TryGetValue("OAuthSub", out var v) ? v : null; }
+        set { EnsureLoaded(); if (value is null) _settings.Remove("OAuthSub"); else _settings["OAuthSub"] = value; Save(); }
+    }
+
+    /// <summary>Display name / email shown on the lock screen for OAuth.</summary>
+    public static string? OAuthDisplayName
+    {
+        get { EnsureLoaded(); return _settings.TryGetValue("OAuthDisplayName", out var v) ? v : null; }
+        set { EnsureLoaded(); if (value is null) _settings.Remove("OAuthDisplayName"); else _settings["OAuthDisplayName"] = value; Save(); }
     }
 }

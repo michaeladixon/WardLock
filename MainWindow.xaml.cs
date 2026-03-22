@@ -102,9 +102,9 @@ public partial class MainWindow : Window
 
     private void OnMoveToVaultClick(object sender, RoutedEventArgs e)
     {
-        var button   = (Button)sender;
-        var account  = (AccountViewModel)button.DataContext;
-        var mainVm   = (MainViewModel)button.Tag;
+        var button  = (Button)sender;
+        var account = (AccountViewModel)button.DataContext;
+        var mainVm  = (MainViewModel)button.Tag;
 
         if (mainVm.OpenVaultNames.Count == 0)
         {
@@ -122,16 +122,77 @@ public partial class MainWindow : Window
             var name = vaultName;
             var item = new MenuItem
             {
-                Header     = $"→ {name}",
+                Header     = name,
                 Background = surface,
-                Foreground = text
+                Foreground = text,
+                Icon       = new TextBlock { Text = "→", FontSize = 13, Foreground = text, VerticalAlignment = VerticalAlignment.Center }
             };
-            item.Click += (_, _) => mainVm.MoveAccountToVault(account, name);
+            item.Click += (_, _) =>
+            {
+                var result = MessageBox.Show(
+                    $"Move \"{account.DisplayName}\" to vault \"{name}\"?",
+                    "Move to Vault",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.No);
+                if (result == MessageBoxResult.Yes)
+                    mainVm.MoveAccountToVault(account, name);
+            };
             menu.Items.Add(item);
         }
 
         button.ContextMenu = menu;
         button.ContextMenu.IsOpen = true;
+    }
+
+    private void OnMoveToLocalClick(object sender, RoutedEventArgs e)
+    {
+        var button  = (Button)sender;
+        var account = (AccountViewModel)button.DataContext;
+        var mainVm  = (MainViewModel)button.Tag;
+
+        var result = MessageBox.Show(
+            $"Move \"{account.DisplayName}\" from vault \"{account.VaultName}\" to Personal?\n\nThe secret will be re-encrypted with your Windows user profile.",
+            "Move to Personal",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.No);
+
+        if (result == MessageBoxResult.Yes)
+            mainVm.MoveAccountToLocal(account);
+    }
+
+    private void OnDeleteClick(object sender, RoutedEventArgs e)
+    {
+        var button  = (Button)sender;
+        var account = (AccountViewModel)button.DataContext;
+        var mainVm  = (MainViewModel)button.Tag;
+
+        var result = MessageBox.Show(
+            $"Remove \"{account.DisplayName}\"?\n\nThis cannot be undone.",
+            "Remove Token",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+
+        if (result == MessageBoxResult.Yes)
+            mainVm.RemoveAccountCommand.Execute(account);
+    }
+
+    private void OnLockPasswordKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+            SubmitLockPassword();
+    }
+
+    private void OnUnlockWithPasswordClick(object sender, RoutedEventArgs e)
+        => SubmitLockPassword();
+
+    private void SubmitLockPassword()
+    {
+        var vm = (MainViewModel)DataContext;
+        vm.TryUnlockWithPassword(LockPasswordBox.Password);
+        LockPasswordBox.Clear();
     }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e)

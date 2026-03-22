@@ -35,7 +35,10 @@ public partial class MainViewModel : ObservableObject
     private bool _windowsHelloAvailable;
 
     [ObservableProperty]
-    private bool _windowsHelloEnabled;
+    private LockMethod _activeLockMethod;
+
+    [ObservableProperty]
+    private string _oAuthDisplayName = string.Empty;
 
     // Manual entry fields
     [ObservableProperty]
@@ -68,26 +71,90 @@ public partial class MainViewModel : ObservableObject
     private async Task InitializeAsync()
     {
         WindowsHelloAvailable = await WindowsHelloService.IsAvailableAsync();
-        WindowsHelloEnabled = AppSettings.IsWindowsHelloEnabled;
+        ActiveLockMethod      = AppSettings.ActiveLockMethod;
+        OAuthDisplayName      = AppSettings.OAuthDisplayName ?? string.Empty;
 
-        if (WindowsHelloAvailable && WindowsHelloEnabled)
-        {
-            IsUnlocked = false;
-            StatusMessage = "Unlock with Windows Hello to view codes.";
-        }
-        else
+        if (ActiveLockMethod == LockMethod.None)
         {
             Unlock();
         }
+        else
+        {
+            IsUnlocked    = false;
+            StatusMessage = ActiveLockMethod switch
+            {
+                LockMethod.Password      => "Enter your password to unlock.",
+                LockMethod.WindowsHello  => "Verify with Windows Hello or PIN to unlock.",
+                LockMethod.OAuthGoogle   => $"Sign in with Google to unlock.",
+                LockMethod.OAuthMicrosoft => $"Sign in with Microsoft to unlock.",
+                LockMethod.OAuthFacebook => $"Sign in with Facebook to unlock.",
+                _                        => "Unlock to view codes."
+            };
+        }
+    }
+
+    // Called from code-behind lock screen (PasswordBox can't data-bind)
+    public void TryUnlockWithPassword(string password)
+    {
+        if (PasswordLockService.Verify(password))
+            Unlock();
+        else
+            StatusMessage = "Incorrect password. Try again.";
     }
 
     [RelayCommand]
     private async Task RequestUnlock()
     {
-        if (await WindowsHelloService.VerifyAsync())
-            Unlock();
-        else
-            StatusMessage = "Verification failed. Try again.";
+        switch (ActiveLockMethod)
+        {
+            case LockMethod.WindowsHello:
+                if (await WindowsHelloService.VerifyAsync())
+                    Unlock();
+                else
+                    StatusMessage = "Verification failed. Try again.";
+                break;
+
+            case LockMethod.OAuthGoogle:
+            case LockMethod.OAuthMicrosoft:
+            case LockMethod.OAuthFacebook:
+                await UnlockWithOAuthAsync(ActiveLockMethod);
+                break;
+
+            default:
+                Unlock();
+                break;
+        }
+    }
+
+    private async Task UnlockWithOAuthAsync(LockMethod method)
+    {
+        var provider = method switch
+        {
+            LockMethod.OAuthGoogle    => OAuthService.Provider.Google,
+            LockMethod.OAuthMicrosoft => OAuthService.Provider.Microsoft,
+            _                         => OAuthService.Provider.Facebook,
+        };
+
+        try
+        {
+            StatusMessage = "Opening browser — sign in to continue…";
+            var identity = await OAuthService.AuthenticateAsync(provider);
+            if (identity == null)
+            {
+                StatusMessage = "Sign-in cancelled or timed out.";
+                return;
+            }
+
+            var storedSub = AppSettings.OAuthSub;
+            if (string.IsNullOrEmpty(storedSub) || identity.Sub == storedSub)
+                Unlock();
+            else
+                StatusMessage = "Signed in as a different account. Use the account you set up WardLock with.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Sign-in failed: {ex.Message}";
+        }
     }
 
     private void Unlock()
@@ -552,6 +619,39 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = $"Moved {personal.Issuer} to '{vaultName}'.";
     }
 
+    /// <summary>
+    /// Decrypts a vault account's plaintext secret and moves it to the personal store (DPAPI-encrypted).
+    /// </summary>
+    public void MoveAccountToLocal(AccountViewModel accountVm)
+    {
+        if (!accountVm.IsShared) return;
+
+        var vault = _openVaults.FirstOrDefault(v => v.VaultName == accountVm.VaultName);
+        if (vault == null) return;
+
+        var vaultAccount = vault.Accounts.FirstOrDefault(a => a.Id == accountVm.Id);
+        if (vaultAccount == null) return;
+
+        var plaintext = vaultAccount.PlaintextSecret ?? string.Empty;
+        var personal = new AuthAccount
+        {
+            Issuer          = vaultAccount.Issuer,
+            Label           = vaultAccount.Label,
+            EncryptedSecret = SecretVault.Encrypt(plaintext),
+            Digits          = vaultAccount.Digits,
+            Period          = vaultAccount.Period,
+            Algorithm       = vaultAccount.Algorithm
+        };
+
+        vault.RemoveAccount(vaultAccount.Id);
+        _store.Add(personal);
+
+        Accounts.Remove(accountVm);
+        Accounts.Add(new AccountViewModel(personal));
+
+        StatusMessage = $"Moved {personal.Issuer} to Personal.";
+    }
+
     // ──────────────────────────────────────────────
     // Export / Import
     // ──────────────────────────────────────────────
@@ -651,28 +751,86 @@ public partial class MainViewModel : ObservableObject
     }
 
     // ──────────────────────────────────────────────
-    // Windows Hello Toggle
+    // Lock Method Configuration
     // ──────────────────────────────────────────────
 
     [RelayCommand]
-    private async Task ToggleWindowsHello()
+    private void SetLockNone()
     {
-        if (!WindowsHelloAvailable) return;
+        PasswordLockService.Clear();
+        AppSettings.OAuthSub         = null;
+        AppSettings.OAuthDisplayName = null;
+        ActiveLockMethod             = LockMethod.None;
+        AppSettings.ActiveLockMethod = LockMethod.None;
+        StatusMessage = "App lock disabled.";
+    }
 
-        if (!WindowsHelloEnabled)
+    [RelayCommand]
+    private void SetLockPassword()
+    {
+        var dlg = new PasswordDialog("Choose an app unlock password:", requireConfirmation: true);
+        if (dlg.ShowDialog() != true || string.IsNullOrEmpty(dlg.Password)) return;
+
+        PasswordLockService.Set(dlg.Password);
+        ActiveLockMethod             = LockMethod.Password;
+        AppSettings.ActiveLockMethod = LockMethod.Password;
+        StatusMessage = "Password lock enabled.";
+    }
+
+    [RelayCommand]
+    private async Task SetLockWindowsHello()
+    {
+        if (!WindowsHelloAvailable)
         {
-            if (await WindowsHelloService.VerifyAsync("Verify to enable Windows Hello lock"))
-            {
-                WindowsHelloEnabled = true;
-                AppSettings.IsWindowsHelloEnabled = true;
-                StatusMessage = "Windows Hello lock enabled.";
-            }
+            StatusMessage = "Windows Hello is not available on this device.";
+            return;
         }
-        else
+        if (!await WindowsHelloService.VerifyAsync("Verify to enable Windows Hello lock"))
+            return;
+
+        ActiveLockMethod             = LockMethod.WindowsHello;
+        AppSettings.ActiveLockMethod = LockMethod.WindowsHello;
+        StatusMessage = "Windows Hello / PIN lock enabled.";
+    }
+
+    [RelayCommand]
+    private async Task SetLockOAuth(string? providerName)
+    {
+        if (!Enum.TryParse<OAuthService.Provider>(providerName, out var provider)) return;
+
+        var lockMethod = provider switch
         {
-            WindowsHelloEnabled = false;
-            AppSettings.IsWindowsHelloEnabled = false;
-            StatusMessage = "Windows Hello lock disabled.";
+            OAuthService.Provider.Google    => LockMethod.OAuthGoogle,
+            OAuthService.Provider.Microsoft => LockMethod.OAuthMicrosoft,
+            _                               => LockMethod.OAuthFacebook,
+        };
+
+        if (!OAuthService.IsConfigured(provider))
+        {
+            StatusMessage = $"{provider} client ID is not configured. Add it to OAuthService.cs before using this option.";
+            return;
+        }
+
+        try
+        {
+            StatusMessage = $"Opening browser to set up {provider} sign-in…";
+            var identity = await OAuthService.AuthenticateAsync(provider);
+            if (identity == null)
+            {
+                StatusMessage = "Setup cancelled.";
+                return;
+            }
+
+            AppSettings.OAuthSub         = identity.Sub;
+            AppSettings.OAuthDisplayName = string.IsNullOrEmpty(identity.Name) ? identity.Email : identity.Name;
+            OAuthDisplayName             = AppSettings.OAuthDisplayName ?? string.Empty;
+            ActiveLockMethod             = lockMethod;
+            AppSettings.ActiveLockMethod = lockMethod;
+            StatusMessage = $"{provider} lock enabled for {identity.Email}.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Setup failed: {ex.Message}";
         }
     }
 
