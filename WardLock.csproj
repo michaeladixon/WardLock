@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+<AssemblyName>WardLock</AssemblyName>
+    <ApplicationIcon>shield.ico</ApplicationIcon>
+    <RootNamespace>WardLock</RootNamespace>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Shield icon as WPF pack resource (Window.Icon + tray) -->
+    <Resource Include="shield.ico"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TOTP generation (RFC 6238) -->
+    <PackageReference Include="Otp.NET" Version="1.4.1" />
+    <!-- MVVM toolkit -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1" />
+    <!-- QR code reading from screen capture / image file -->
+    <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.14" />
+    <!-- System tray icon -->
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+  </ItemGroup>
+
+</Project>

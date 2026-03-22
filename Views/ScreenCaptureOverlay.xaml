@@ -1,0 +1,32 @@
+<Window x:Class="WardLock.Views.ScreenCaptureOverlay"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Topmost="True"
+        Background="#01000000" ShowInTaskbar="False"
+        Cursor="Cross" ResizeMode="NoResize"
+        WindowState="Maximized"
+        Left="{x:Static SystemParameters.VirtualScreenLeft}"
+        Top="{x:Static SystemParameters.VirtualScreenTop}"
+        Width="{x:Static SystemParameters.VirtualScreenWidth}"
+        Height="{x:Static SystemParameters.VirtualScreenHeight}"
+        KeyDown="OnKeyDown"
+        MouseLeftButtonDown="OnMouseDown"
+        MouseMove="OnMouseMoveHandler"
+        MouseLeftButtonUp="OnMouseUp">
+
+    <Canvas x:Name="OverlayCanvas">
+        <!-- Instruction text -->
+        <TextBlock Canvas.Left="20" Canvas.Top="20"
+                   Text="Click and drag to select the QR code area. Press Esc to cancel."
+                   Foreground="#cdd6f4" FontSize="16" FontWeight="SemiBold">
+            <TextBlock.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="4" ShadowDepth="1"/>
+            </TextBlock.Effect>
+        </TextBlock>
+
+        <!-- Selection rectangle -->
+        <Rectangle x:Name="SelectionRect" Stroke="#89b4fa" StrokeThickness="2"
+                   Fill="#2089b4fa" Visibility="Collapsed"
+                   StrokeDashArray="4 2"/>
+    </Canvas>
+</Window>

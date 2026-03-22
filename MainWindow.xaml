@@ -1,0 +1,483 @@
+<Window x:Class="WardLock.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:WardLock.ViewModels"
+        xmlns:behaviors="clr-namespace:WardLock.Behaviors"
+        xmlns:tb="http://www.hardcodet.net/taskbar"
+        Title="WardLock" Height="560" Width="420"
+        WindowStartupLocation="CenterScreen"
+        Background="#1e1e2e" Foreground="#cdd6f4"
+        Icon="shield.ico"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        StateChanged="OnStateChanged"
+        Closing="OnClosing">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="46" ResizeBorderThickness="5"
+                      CornerRadius="0" GlassFrameThickness="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style x:Key="AccentButton" TargetType="Button">
+            <Setter Property="Background" Value="#89b4fa"/>
+            <Setter Property="Foreground" Value="#1e1e2e"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SubtleButton" TargetType="Button">
+            <Setter Property="Background" Value="#313244"/>
+            <Setter Property="Foreground" Value="#cdd6f4"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MenuButton" TargetType="Button" BasedOn="{StaticResource SubtleButton}">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <!-- Scrollbar thumb -->
+        <Style x:Key="ScrollThumb" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="ThumbBorder" Background="#45475a"
+                                CornerRadius="3" Margin="2,1"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="#585b70"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="#89b4fa"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Themed vertical scrollbar — no arrow buttons, slim track -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="MinWidth" Value="8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid>
+                            <Border Background="#1e1e2e" CornerRadius="4"/>
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ScrollThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="InputBox" TargetType="TextBox">
+            <Setter Property="Background" Value="#313244"/>
+            <Setter Property="Foreground" Value="#cdd6f4"/>
+            <Setter Property="BorderBrush" Value="#45475a"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="CaretBrush" Value="#cdd6f4"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <!-- System Tray Icon -->
+        <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="WardLock"
+                        IconSource="shield.ico"
+                        TrayMouseDoubleClick="OnTrayDoubleClick"
+                        Visibility="Visible">
+            <tb:TaskbarIcon.ContextMenu>
+                <ContextMenu Background="#313244" Foreground="#cdd6f4" BorderBrush="#45475a">
+                    <MenuItem Header="Show WardLock" Click="OnTrayShow">
+                        <MenuItem.Icon>
+                            <TextBlock Text="&#128275;" FontSize="12" VerticalAlignment="Center"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <Separator Background="#45475a"/>
+                    <MenuItem Header="Exit" Click="OnTrayExit">
+                        <MenuItem.Icon>
+                            <TextBlock Text="&#10005;" FontSize="12" Foreground="#f38ba8" VerticalAlignment="Center"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                </ContextMenu>
+            </tb:TaskbarIcon.ContextMenu>
+        </tb:TaskbarIcon>
+
+        <!-- Lock Screen (Windows Hello) -->
+        <Grid x:Name="LockScreen">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsUnlocked}" Value="False">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="&#128274;" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                <TextBlock Text="WardLock is locked" FontSize="18" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                <TextBlock Text="Verify your identity with Windows Hello" FontSize="12"
+                           Foreground="#a6adc8" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+                <Button Content="&#128275; Unlock" Style="{StaticResource AccentButton}"
+                        FontSize="14" Padding="24,10"
+                        HorizontalAlignment="Center"
+                        Command="{Binding RequestUnlockCommand}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Main Content (shown when unlocked) -->
+        <Grid Visibility="{Binding IsUnlocked, Converter={StaticResource BoolToVis}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" Background="#181825" Padding="16,10">
+                <DockPanel>
+                    <TextBlock Text="&#x1f512; WardLock" FontSize="18" FontWeight="Bold"
+                               Foreground="#89b4fa" VerticalAlignment="Center"/>
+
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <!-- Menu button -->
+                        <Button Content="&#9776;" FontSize="16" Style="{StaticResource SubtleButton}"
+                                Margin="0,0,6,0" Click="OnMenuClick" x:Name="MenuBtn"
+                                WindowChrome.IsHitTestVisibleInChrome="True"/>
+                        <Button Content="+ Add" Style="{StaticResource AccentButton}"
+                                Command="{Binding ToggleAddPanelCommand}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"/>
+                        <!-- Window controls -->
+                        <Button Content="&#8211;" Width="32" Height="28" Margin="10,0,0,0"
+                                Style="{StaticResource SubtleButton}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="OnMinimizeClick"/>
+                        <Button Content="&#10005;" Width="32" Height="28" Margin="2,0,0,0"
+                                Style="{StaticResource SubtleButton}" Foreground="#f38ba8"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="OnCloseClick"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- Menu Popup -->
+            <Popup x:Name="MenuPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=MenuBtn}"
+                   StaysOpen="False" AllowsTransparency="True">
+                <Border Background="#313244" CornerRadius="6" Padding="6"
+                        BorderBrush="#45475a" BorderThickness="1">
+                    <StackPanel Width="200">
+                        <TextBlock Text="QR Scanning" FontSize="10" Foreground="#585b70"
+                                   Margin="10,4,0,2" FontWeight="SemiBold"/>
+                        <Button Content="&#128247; Scan QR from Screen" Style="{StaticResource MenuButton}"
+                                Command="{Binding ScanQrFromScreenCommand}"/>
+                        <Button Content="&#128193; Scan QR from File" Style="{StaticResource MenuButton}"
+                                Command="{Binding ScanQrFromFileCommand}"/>
+                        <Button Content="&#128203; Scan QR from Clipboard" Style="{StaticResource MenuButton}"
+                                Command="{Binding ScanQrFromClipboardImageCommand}"/>
+
+                        <Separator Background="#45475a" Margin="4,6"/>
+                        <TextBlock Text="Backup" FontSize="10" Foreground="#585b70"
+                                   Margin="10,4,0,2" FontWeight="SemiBold"/>
+                        <Button Content="&#128229; Export Backup" Style="{StaticResource MenuButton}"
+                                Command="{Binding ExportAccountsCommand}"/>
+                        <Button Content="&#128228; Import Backup" Style="{StaticResource MenuButton}"
+                                Command="{Binding ImportAccountsCommand}"/>
+
+                        <Separator Background="#45475a" Margin="4,6"/>
+                        <TextBlock Text="Security" FontSize="10" Foreground="#585b70"
+                                   Margin="10,4,0,2" FontWeight="SemiBold"/>
+                        <Button Command="{Binding ToggleWindowsHelloCommand}">
+                            <Button.Content>
+                                <TextBlock>
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="&#128275; Enable Windows Hello Lock"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding WindowsHelloEnabled}" Value="True">
+                                                    <Setter Property="Text" Value="&#128274; Disable Windows Hello Lock"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Button.Content>
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource MenuButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding WindowsHelloAvailable}" Value="False">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <Separator Background="#45475a" Margin="4,6"/>
+                        <TextBlock Text="Shared Vaults" FontSize="10" Foreground="#585b70"
+                                   Margin="10,4,0,2" FontWeight="SemiBold"/>
+                        <Button Content="&#128194; Create Shared Vault" Style="{StaticResource MenuButton}"
+                                Command="{Binding CreateSharedVaultCommand}"/>
+                        <Button Content="&#128194; Open Shared Vault" Style="{StaticResource MenuButton}"
+                                Command="{Binding OpenSharedVaultCommand}"/>
+                        <ItemsControl ItemsSource="{Binding OpenVaultNames}" Margin="0,2,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="4,1">
+                                        <Button DockPanel.Dock="Right" Content="&#10005;" FontSize="9"
+                                                Foreground="#f38ba8" Background="Transparent"
+                                                BorderThickness="0" Cursor="Hand" Padding="4,2"
+                                                Command="{Binding DataContext.CloseSharedVaultCommand,
+                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"/>
+                                        <TextBlock Text="{Binding StringFormat='  &#128279; {0}'}"
+                                                   FontSize="11" Foreground="#a6e3a1"
+                                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Separator Background="#45475a" Margin="4,6"/>
+                        <TextBlock Text="Ctrl+Shift+A — global hotkey" FontSize="10"
+                                   Foreground="#585b70" Margin="10,4,10,4" FontStyle="Italic"/>
+                    </StackPanel>
+                </Border>
+            </Popup>
+
+            <!-- Account List with Drag-and-Drop -->
+            <ListBox Grid.Row="1" ItemsSource="{Binding Accounts}"
+                     Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     HorizontalContentAlignment="Stretch"
+                     behaviors:DragDropReorder.IsEnabled="True"
+                     behaviors:DragDropReorder.MoveCommand="{Binding MoveAccountCommand}">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <ContentPresenter/>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border CornerRadius="8" Margin="12,4" Padding="14,10" Cursor="Hand">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="#313244"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding JustCopied}" Value="True">
+                                            <Setter Property="Background" Value="#2a4a2a"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <Border.InputBindings>
+                                <MouseBinding Gesture="LeftClick"
+                                              Command="{Binding CopyToClipboardCommand}"/>
+                            </Border.InputBindings>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Drag handle -->
+                                <TextBlock Grid.Column="0" Text="&#9776;" FontSize="14"
+                                           Foreground="#585b70" VerticalAlignment="Center"
+                                           Margin="0,0,10,0" Cursor="SizeAll"/>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <DockPanel Margin="0,0,0,2">
+                                        <TextBlock Text="{Binding Issuer}" FontSize="11"
+                                                   Foreground="#a6adc8"/>
+                                        <TextBlock Text="{Binding SourceLabel}" FontSize="9"
+                                                   Foreground="#585b70" Margin="6,0,0,0"
+                                                   VerticalAlignment="Center"/>
+                                    </DockPanel>
+                                    <TextBlock FontSize="28" FontWeight="Bold"
+                                               FontFamily="Cascadia Mono, Consolas">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="#a6e3a1"/>
+                                                <Setter Property="Text" Value="{Binding FormattedCode}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding JustCopied}" Value="True">
+                                                        <Setter Property="Text" Value="Copied!"/>
+                                                        <Setter Property="Foreground" Value="#94e2d5"/>
+                                                        <Setter Property="FontSize" Value="20"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Label}" FontSize="10"
+                                               Foreground="#585b70" Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <!-- Countdown -->
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,0">
+                                    <TextBlock Text="{Binding SecondsRemaining, StringFormat={}{0}s}"
+                                               FontSize="14" Foreground="#f9e2af"
+                                               HorizontalAlignment="Center"/>
+                                    <ProgressBar Value="{Binding ProgressPercent}" Maximum="100"
+                                                 Width="40" Height="3" Margin="0,4,0,0"
+                                                 Foreground="#f9e2af" Background="#45475a"/>
+                                </StackPanel>
+
+                                <!-- Move to vault (personal accounts only) -->
+                                <Button Grid.Column="3" Content="&#8594;" FontSize="12"
+                                        VerticalAlignment="Center" Margin="4,0,0,0"
+                                        ToolTip="Move to shared vault"
+                                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Click="OnMoveToVaultClick">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource SubtleButton}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsShared}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+
+                                <!-- Delete -->
+                                <Button Grid.Column="4" Content="&#10005;" FontSize="12"
+                                        Style="{StaticResource SubtleButton}"
+                                        Foreground="#f38ba8" VerticalAlignment="Center"
+                                        Command="{Binding DataContext.RemoveAccountCommand,
+                                            RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- Empty state -->
+            <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Accounts.Count}" Value="0">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="No accounts yet" FontSize="16" FontWeight="SemiBold"
+                           Foreground="#585b70" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <TextBlock Text="Click + Add, scan a QR code, or import a backup"
+                           FontSize="12" Foreground="#45475a" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Add Panel -->
+            <Border Grid.Row="2" Background="#181825" Padding="12"
+                    Visibility="{Binding IsAddPanelVisible, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="Add Account" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+                    <!-- Target vault selector -->
+                    <DockPanel Margin="0,0,0,8">
+                        <TextBlock Text="Add to:" FontSize="11" Foreground="#a6adc8"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox ItemsSource="{Binding AddTargetOptions}"
+                                  SelectedItem="{Binding AddTarget}"
+                                  Background="#313244" Foreground="#cdd6f4"
+                                  BorderBrush="#45475a" FontSize="12" Padding="6,3"
+                                  MinWidth="120"/>
+                    </DockPanel>
+
+                    <!-- URI input -->
+                    <TextBlock Text="otpauth:// URI:" FontSize="11" Foreground="#a6adc8"/>
+                    <DockPanel Margin="0,4,0,6">
+                        <Button DockPanel.Dock="Right" Content="Paste" Margin="6,0,0,0"
+                                Style="{StaticResource SubtleButton}"
+                                Command="{Binding PasteFromClipboardCommand}"/>
+                        <TextBox Text="{Binding OtpAuthInput, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource InputBox}"/>
+                    </DockPanel>
+                    <Button Content="Add from URI" Style="{StaticResource AccentButton}"
+                            Command="{Binding AddFromUriCommand}"
+                            HorizontalAlignment="Left" Margin="0,0,0,10"/>
+
+                    <Separator Background="#45475a" Margin="0,4"/>
+
+                    <!-- Manual entry -->
+                    <TextBlock Text="— or enter manually —" FontSize="11"
+                               Foreground="#585b70" HorizontalAlignment="Center" Margin="0,6"/>
+                    <TextBlock Text="Issuer (e.g. GitHub):" FontSize="11" Foreground="#a6adc8"/>
+                    <TextBox Text="{Binding ManualIssuer, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource InputBox}" Margin="0,2,0,6"/>
+                    <TextBlock Text="Label (e.g. user@email.com):" FontSize="11" Foreground="#a6adc8"/>
+                    <TextBox Text="{Binding ManualLabel, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource InputBox}" Margin="0,2,0,6"/>
+                    <TextBlock Text="Secret (Base32):" FontSize="11" Foreground="#a6adc8"/>
+                    <TextBox Text="{Binding ManualSecret, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource InputBox}" Margin="0,2,0,6"/>
+                    <Button Content="Add Manual" Style="{StaticResource AccentButton}"
+                            Command="{Binding AddManualCommand}"
+                            HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Status bar -->
+            <Border Grid.Row="3" Background="#181825" Padding="12,6">
+                <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="#a6adc8"/>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
