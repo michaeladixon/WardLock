@@ -83,10 +83,12 @@ Write-Host "[OK] Certificate created in CurrentUser\My" -ForegroundColor Green
 Write-Host "     Thumbprint: $($cert.Thumbprint)" -ForegroundColor White
 Write-Host "     Expires:    $($cert.NotAfter.ToString('yyyy-MM-dd'))" -ForegroundColor DarkGray
 
-# Export to .pfx WITHOUT a password so MSBuild can use it directly
-# (The private key is already protected by the Windows cert store / DPAPI)
-Export-PfxCertificate -Cert $cert -FilePath $pfxPath -NoPassword | Out-Null
-Write-Host "[OK] Exported to $pfxPath (no password)" -ForegroundColor Green
+# Export to .pfx with an empty string password for max compatibility.
+# -NoPassword only exists on newer Windows builds; empty password works everywhere
+# and MSBuild handles it without needing PackageCertificatePassword in the wapproj.
+$emptyPw = ConvertTo-SecureString -String "" -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $emptyPw | Out-Null
+Write-Host "[OK] Exported to $pfxPath" -ForegroundColor Green
 
 # Install to TrustedPeople so sideload works without manual cert install
 $cerPath = Join-Path $env:TEMP 'WardLock_Signing.cer'
@@ -123,10 +125,8 @@ Write-Host "SNK:         $snkPath" -ForegroundColor White
 Write-Host "PFX:         $pfxPath" -ForegroundColor White
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
-Write-Host "  1. Delete old WardLock.snk and WardLock_Signing.pfx if they exist" -ForegroundColor White
-Write-Host "  2. Run this script again if you deleted them" -ForegroundColor White
-Write-Host "  3. Rebuild:  dotnet build -c Release -r win-x64" -ForegroundColor White
-Write-Host "  4. Publish via VS: Right-click WardLock_Installer > Publish > Create App Packages" -ForegroundColor White
-Write-Host "  5. Install the .msixbundle from the output folder" -ForegroundColor White
+Write-Host "  1. Rebuild:  dotnet build -c Release -r win-x64" -ForegroundColor White
+Write-Host "  2. Publish via VS: Right-click WardLock_Installer > Publish > Create App Packages" -ForegroundColor White
+Write-Host "  3. Install the .msixbundle from the output folder" -ForegroundColor White
 Write-Host ""
 Write-Host "The .snk and .pfx are gitignored - do NOT commit them." -ForegroundColor Yellow
