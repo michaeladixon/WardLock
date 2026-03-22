@@ -630,7 +630,7 @@
                                     <!-- TOTP code: color varies by source (green=personal, mauve=vault) -->
                                     <TextBlock x:Name="CodeText" FontSize="28" FontWeight="Bold"
                                                FontFamily="Cascadia Mono, Consolas"
-                                               Text="{Binding FormattedCode}"
+                                               Text="{Binding DisplayCode}"
                                                Tag="{Binding CodeColor}">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
@@ -641,7 +641,6 @@
                                                 </Setter>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding JustCopied}" Value="True">
-                                                        <Setter Property="Text" Value="Copied!"/>
                                                         <Setter Property="Foreground" Value="#94e2d5"/>
                                                         <Setter Property="FontSize" Value="20"/>
                                                     </DataTrigger>

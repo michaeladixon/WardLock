@@ -43,12 +43,15 @@ public partial class AccountViewModel : ObservableObject
     [ObservableProperty]
     private bool _justCopied;
 
+    partial void OnJustCopiedChanged(bool value) => OnPropertyChanged(nameof(DisplayCode));
+
     public void Refresh()
     {
         CurrentCode = TotpGenerator.GenerateCode(_account);
         SecondsRemaining = TotpGenerator.SecondsRemaining(Period);
         ProgressPercent = (double)SecondsRemaining / Period * 100;
         OnPropertyChanged(nameof(FormattedCode));
+        OnPropertyChanged(nameof(DisplayCode));
     }
 
     /// <summary>
@@ -65,6 +68,9 @@ public partial class AccountViewModel : ObservableObject
             return CurrentCode;
         }
     }
+
+    /// <summary>Shows "Copied!" during the copy feedback window, otherwise the formatted code.</summary>
+    public string DisplayCode => JustCopied ? "Copied!" : FormattedCode;
 
     [RelayCommand]
     private async Task CopyToClipboard()
