@@ -770,7 +770,15 @@
 
             <!-- Status bar -->
             <Border Grid.Row="4" Background="#181825" Padding="12,6">
-                <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="#a6adc8"/>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="{Binding VaultIndicatorText}"
+                               FontSize="11" Foreground="#a6e3a1"
+                               Visibility="{Binding IsVaultConnected, Converter={StaticResource BoolToVis}}"
+                               Margin="0,0,12,0"/>
+                    <TextBlock Text="{Binding FooterStatusText}"
+                               FontSize="11" Foreground="#a6adc8"/>
+                </DockPanel>
             </Border>
         </Grid>
     </Grid>

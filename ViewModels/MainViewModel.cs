@@ -26,6 +26,23 @@ public partial class MainViewModel : ObservableObject
     private string _statusMessage = string.Empty;
 
     [ObservableProperty]
+    private string _footerStatusText = string.Empty;
+
+    private string _vaultIndicatorText = string.Empty;
+    public string VaultIndicatorText
+    {
+        get => _vaultIndicatorText;
+        private set => SetProperty(ref _vaultIndicatorText, value);
+    }
+
+    private bool _isVaultConnected;
+    public bool IsVaultConnected
+    {
+        get => _isVaultConnected;
+        private set => SetProperty(ref _isVaultConnected, value);
+    }
+
+    [ObservableProperty]
     private bool _isAddPanelVisible;
 
     [ObservableProperty]
@@ -64,15 +81,51 @@ public partial class MainViewModel : ObservableObject
     private readonly Services.SharedVaultCoordinator _vaultCoordinator;
     private readonly Services.QrCoordinator _qrCoordinator;
 
+    private readonly DispatcherTimer _statusFadeTimer;
+
     public MainViewModel()
     {
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _timer.Tick += (_, _) => RefreshAll();
 
+        _statusFadeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _statusFadeTimer.Tick += (_, _) =>
+        {
+            _statusFadeTimer.Stop();
+            FooterStatusText = string.Empty;
+        };
+
+        OpenVaultNames.CollectionChanged += (_, _) => UpdateVaultIndicator();
+
         _ = InitializeAsync();
         // instantiate coordinators after basic fields are constructed
         _vaultCoordinator = new Services.SharedVaultCoordinator(_openVaults, Accounts, OpenVaultNames, AddTargetOptions, _store, s => StatusMessage = s);
         _qrCoordinator = new Services.QrCoordinator(_store, Accounts, () => GetSelectedVault(), s => StatusMessage = s);
+    }
+
+    private void UpdateVaultIndicator()
+    {
+        VaultIndicatorText = OpenVaultNames.Count switch
+        {
+            0 => string.Empty,
+            1 => $"● {OpenVaultNames[0]}",
+            _ => $"● {OpenVaultNames.Count} vaults"
+        };
+        IsVaultConnected = OpenVaultNames.Count > 0;
+    }
+
+    partial void OnStatusMessageChanged(string value)
+    {
+        if (!IsUnlocked) return;
+        if (string.IsNullOrEmpty(value))
+        {
+            _statusFadeTimer.Stop();
+            FooterStatusText = string.Empty;
+            return;
+        }
+        FooterStatusText = value;
+        _statusFadeTimer.Stop();
+        _statusFadeTimer.Start();
     }
 
     private async Task InitializeAsync()
