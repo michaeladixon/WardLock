@@ -144,7 +144,7 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            StatusMessage = "Opening browser — sign in to continue…";
+            StatusMessage = "Opening browser \u2014 sign in to continue\u2026";
             var identity = await OAuthService.AuthenticateAsync(provider);
             if (identity == null)
             {
@@ -174,9 +174,56 @@ public partial class MainViewModel : ObservableObject
         foreach (var acct in _store.Accounts)
             Accounts.Add(new AccountViewModel(acct));
 
+        // Auto-open remembered vaults
+        AutoOpenRememberedVaults();
+
         _timer.Start();
         RefreshAll();
-        StatusMessage = $"{Accounts.Count} account(s) loaded.";
+
+        var vaultCount = _openVaults.Count;
+        StatusMessage = vaultCount > 0
+            ? $"{Accounts.Count} account(s) loaded. {vaultCount} vault(s) reconnected."
+            : $"{Accounts.Count} account(s) loaded.";
+    }
+
+    /// <summary>
+    /// Attempt to auto-open all remembered vaults using DPAPI-cached passwords.
+    /// Silently skips vaults that fail (file missing, password expired, etc.).
+    /// </summary>
+    private void AutoOpenRememberedVaults()
+    {
+        var remembered = AppSettings.RememberedVaultPaths;
+        foreach (var path in remembered)
+        {
+            // Skip if already open
+            if (_openVaults.Any(v => string.Equals(v.FilePath, path, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            var password = VaultPasswordCache.TryLoad(path);
+            if (password == null) continue;
+
+            if (!System.IO.File.Exists(path))
+            {
+                // File gone — clean up
+                VaultPasswordCache.Remove(path);
+                AppSettings.RemoveRememberedVaultPath(path);
+                continue;
+            }
+
+            try
+            {
+                var vault = new SharedVaultService(path);
+                vault.Open(password);
+                RegisterVault(vault);
+            }
+            catch
+            {
+                // Wrong password (changed by teammate?), corrupted, etc.
+                // Remove stale cache so user gets prompted next time
+                VaultPasswordCache.Remove(path);
+                AppSettings.RemoveRememberedVaultPath(path);
+            }
+        }
     }
 
     private void RefreshAll()
@@ -340,9 +387,9 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     // Shared Vaults
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     [RelayCommand]
     private void CreateSharedVault()
@@ -365,6 +412,11 @@ public partial class MainViewModel : ObservableObject
             var vault = SharedVaultService.CreateNew(dlg.FileName, pwDialog.Password);
             RegisterVault(vault);
             AppSettings.AddRecentVaultPath(dlg.FileName);
+
+            // Cache password and remember vault for auto-reconnect
+            VaultPasswordCache.Store(dlg.FileName, pwDialog.Password);
+            AppSettings.AddRememberedVaultPath(dlg.FileName);
+
             StatusMessage = $"Created shared vault '{vault.VaultName}'. Share the file with your team.";
         }
         catch (Exception ex)
@@ -400,7 +452,12 @@ public partial class MainViewModel : ObservableObject
             vault.Open(pwDialog.Password);
             RegisterVault(vault);
             AppSettings.AddRecentVaultPath(dlg.FileName);
-            StatusMessage = $"Opened vault '{vault.VaultName}' with {vault.Accounts.Count} account(s).";
+
+            // Cache password and remember vault for auto-reconnect
+            VaultPasswordCache.Store(dlg.FileName, pwDialog.Password);
+            AppSettings.AddRememberedVaultPath(dlg.FileName);
+
+            StatusMessage = $"Opened vault '{vault.VaultName}' with {vault.Accounts.Count} account(s). Vault will reconnect automatically.";
         }
         catch (System.Security.Cryptography.AuthenticationTagMismatchException)
         {
@@ -423,6 +480,26 @@ public partial class MainViewModel : ObservableObject
         var toRemove = Accounts.Where(a => a.VaultName == vaultName).ToList();
         foreach (var vm in toRemove)
             Accounts.Remove(vm);
+
+        // Ask if user wants to forget the vault (stop auto-reconnecting)
+        var isRemembered = AppSettings.RememberedVaultPaths
+            .Any(p => string.Equals(p, vault.FilePath, StringComparison.OrdinalIgnoreCase));
+
+        if (isRemembered)
+        {
+            var result = System.Windows.MessageBox.Show(
+                $"Stop auto-connecting to '{vaultName}' on startup?\n\nChoose Yes to forget, No to reconnect next time.",
+                "Forget Vault?",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Question,
+                System.Windows.MessageBoxResult.No);
+
+            if (result == System.Windows.MessageBoxResult.Yes)
+            {
+                VaultPasswordCache.Remove(vault.FilePath);
+                AppSettings.RemoveRememberedVaultPath(vault.FilePath);
+            }
+        }
 
         vault.Dispose();
         _openVaults.Remove(vault);
@@ -457,9 +534,9 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     // QR Scanning
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     [RelayCommand]
     private async Task ScanQrFromScreen()
@@ -651,9 +728,9 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = $"Moved {personal.Issuer} to Personal.";
     }
 
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     // Export / Import
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     [RelayCommand]
     private void ExportAccounts()
@@ -724,9 +801,9 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     // Drag-and-Drop Reorder
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     [RelayCommand]
     private void MoveAccount(MoveArgs? args)
@@ -747,9 +824,9 @@ public partial class MainViewModel : ObservableObject
         Accounts.Move(from, to);
     }
 
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     // Lock Method Configuration
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     [RelayCommand]
     private void SetLockNone()
@@ -810,7 +887,7 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            StatusMessage = $"Opening browser to set up {provider} sign-in…";
+            StatusMessage = $"Opening browser to set up {provider} sign-in\u2026";
             var identity = await OAuthService.AuthenticateAsync(provider);
             if (identity == null)
             {
@@ -831,9 +908,9 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     // Cleanup
-    // ──────────────────────────────────────────────
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     public void Shutdown()
     {

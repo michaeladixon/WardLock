@@ -102,7 +102,7 @@ public static class AppSettings
 
     /// <summary>
     /// Recently opened shared vault file paths (pipe-delimited).
-    /// Stored as paths only — passwords are never persisted.
+    /// Stored as paths only — passwords are never persisted here.
     /// </summary>
     public static List<string> RecentVaultPaths
     {
@@ -121,6 +121,45 @@ public static class AppSettings
             _settings["RecentVaultPaths"] = string.Join('|', paths);
             Save();
         }
+    }
+
+    /// <summary>
+    /// Vault paths the user has opted to auto-open on unlock (pipe-delimited).
+    /// Passwords are DPAPI-cached separately in VaultPasswordCache.
+    /// </summary>
+    public static List<string> RememberedVaultPaths
+    {
+        get
+        {
+            EnsureLoaded();
+            if (_settings.TryGetValue("RememberedVaultPaths", out var v) && !string.IsNullOrEmpty(v))
+                return v.Split('|', StringSplitOptions.RemoveEmptyEntries).ToList();
+            return [];
+        }
+        set
+        {
+            EnsureLoaded();
+            var paths = value.Distinct().Take(10).ToList();
+            _settings["RememberedVaultPaths"] = string.Join('|', paths);
+            Save();
+        }
+    }
+
+    public static void AddRememberedVaultPath(string path)
+    {
+        var paths = RememberedVaultPaths;
+        if (!paths.Contains(path, StringComparer.OrdinalIgnoreCase))
+        {
+            paths.Add(path);
+            RememberedVaultPaths = paths;
+        }
+    }
+
+    public static void RemoveRememberedVaultPath(string path)
+    {
+        var paths = RememberedVaultPaths;
+        paths.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        RememberedVaultPaths = paths;
     }
 
     public static void AddRecentVaultPath(string path)

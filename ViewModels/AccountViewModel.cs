@@ -23,7 +23,13 @@ public partial class AccountViewModel : ObservableObject
     /// <summary>Null for personal accounts, vault name for shared accounts.</summary>
     public string? VaultName => _account.VaultName;
     public bool IsShared => _account.VaultName != null;
-    public string SourceLabel => IsShared ? $"🔗 {VaultName}" : "🔒 Personal";
+    public string SourceLabel => IsShared ? $"\ud83d\udd17 {VaultName}" : "\ud83d\udd12 Personal";
+
+    /// <summary>
+    /// Code color: mauve (#cba6f7) for shared vault accounts,
+    /// green (#a6e3a1) for personal accounts.
+    /// </summary>
+    public string CodeColor => IsShared ? "#cba6f7" : "#a6e3a1";
 
     [ObservableProperty]
     private string _currentCode = string.Empty;
