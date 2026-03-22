@@ -10,7 +10,8 @@
         Icon="shield.ico"
         ResizeMode="CanResize"
         StateChanged="OnStateChanged"
-        Closing="OnClosing">
+        Closing="OnClosing"
+        KeyDown="OnWindowKeyDown">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="46" ResizeBorderThickness="5"
@@ -85,7 +86,7 @@
             </Setter>
         </Style>
 
-        <!-- Themed vertical scrollbar — no arrow buttons, slim track -->
+        <!-- Themed vertical scrollbar -->
         <Style TargetType="ScrollBar">
             <Setter Property="Width" Value="8"/>
             <Setter Property="MinWidth" Value="8"/>
@@ -113,6 +114,14 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="6,4"/>
             <Setter Property="CaretBrush" Value="#cdd6f4"/>
+        </Style>
+
+        <!-- Themed context menu -->
+        <Style x:Key="AccountContextMenu" TargetType="ContextMenu">
+            <Setter Property="Background" Value="#313244"/>
+            <Setter Property="Foreground" Value="#cdd6f4"/>
+            <Setter Property="BorderBrush" Value="#45475a"/>
+            <Setter Property="BorderThickness" Value="1"/>
         </Style>
     </Window.Resources>
 
@@ -159,7 +168,7 @@
                            Foreground="#a6adc8" HorizontalAlignment="Center"
                            TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,20"/>
 
-                <!-- Password entry (visible when method=Password) -->
+                <!-- Password entry -->
                 <StackPanel x:Name="LockPasswordPanel" Margin="0,0,0,12">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
@@ -235,27 +244,13 @@
                         </Style>
                     </Button.Style>
                 </Button>
-
-                <TextBlock Text="{Binding OAuthDisplayName, StringFormat='Signed in as: {0}'}"
-                           FontSize="11" Foreground="#585b70" HorizontalAlignment="Center"
-                           Margin="0,8,0,0">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding OAuthDisplayName.Length}" Value="0">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
             </StackPanel>
         </Grid>
 
         <!-- Main Content (shown when unlocked) -->
         <Grid Visibility="{Binding IsUnlocked, Converter={StaticResource BoolToVis}}">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
@@ -269,14 +264,12 @@
                                Foreground="#89b4fa" VerticalAlignment="Center"/>
 
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <!-- Menu button -->
                         <Button Content="&#9776;" FontSize="16" Style="{StaticResource SubtleButton}"
                                 Margin="0,0,6,0" Click="OnMenuClick" x:Name="MenuBtn"
                                 WindowChrome.IsHitTestVisibleInChrome="True"/>
                         <Button Content="+ Add" Style="{StaticResource AccentButton}"
                                 Command="{Binding ToggleAddPanelCommand}"
                                 WindowChrome.IsHitTestVisibleInChrome="True"/>
-                        <!-- Window controls -->
                         <Button Content="&#8211;" Width="32" Height="28" Margin="10,0,0,0"
                                 Style="{StaticResource SubtleButton}"
                                 WindowChrome.IsHitTestVisibleInChrome="True"
@@ -289,14 +282,26 @@
                 </DockPanel>
             </Border>
 
-            <!-- Menu Popup -->
+            <!-- Search Bar -->
+            <Border Grid.Row="1" Background="#181825" Padding="12,4,12,8">
+                <TextBox x:Name="SearchBox" Style="{StaticResource InputBox}"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="12" Padding="8,5"
+                         WindowChrome.IsHitTestVisibleInChrome="True">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource InputBox}">
+                            <Setter Property="Tag" Value="&#128269; Search accounts (Ctrl+F)"/>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </Border>
+
+            <!-- Menu Popup (unchanged, targets MenuBtn) -->
             <Popup x:Name="MenuPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=MenuBtn}"
                    StaysOpen="False" AllowsTransparency="True">
                 <Border Background="#313244" CornerRadius="6" Padding="8"
                         BorderBrush="#45475a" BorderThickness="1">
                     <StackPanel Width="236">
-
-                        <!-- QR Scanning -->
                         <TextBlock Text="QR SCANNING" FontSize="9" FontWeight="Bold"
                                    Foreground="#585b70" Margin="8,4,8,4"/>
                         <Button Style="{StaticResource MenuButton}" Command="{Binding ScanQrFromScreenCommand}">
@@ -319,8 +324,6 @@
                         </Button>
 
                         <Separator Background="#45475a" Margin="4,8"/>
-
-                        <!-- Backup -->
                         <TextBlock Text="BACKUP" FontSize="9" FontWeight="Bold"
                                    Foreground="#585b70" Margin="8,0,8,4"/>
                         <Button Style="{StaticResource MenuButton}" Command="{Binding ExportAccountsCommand}">
@@ -337,12 +340,8 @@
                         </Button>
 
                         <Separator Background="#45475a" Margin="4,8"/>
-
-                        <!-- Security -->
                         <TextBlock Text="SECURITY" FontSize="9" FontWeight="Bold"
                                    Foreground="#585b70" Margin="8,0,8,4"/>
-
-                        <!-- No lock -->
                         <Button Style="{StaticResource MenuButton}" Command="{Binding SetLockNoneCommand}">
                             <DockPanel>
                                 <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
@@ -361,8 +360,6 @@
                                 <TextBlock Text="No lock" Margin="8,0,0,0" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Button>
-
-                        <!-- Password -->
                         <Button Style="{StaticResource MenuButton}" Command="{Binding SetLockPasswordCommand}">
                             <DockPanel>
                                 <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
@@ -381,8 +378,6 @@
                                 <TextBlock Text="Password" Margin="8,0,0,0" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Button>
-
-                        <!-- Windows Hello / PIN -->
                         <Button Command="{Binding SetLockWindowsHelloCommand}">
                             <Button.Content>
                                 <DockPanel>
@@ -413,59 +408,39 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-
-                        <!-- OAuth providers -->
-                        <Button Style="{StaticResource MenuButton}"
-                                Command="{Binding SetLockOAuthCommand}" CommandParameter="Google">
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding SetLockOAuthCommand}" CommandParameter="Google">
                             <DockPanel>
                                 <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="&#9675;"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthGoogle">
-                                                    <Setter Property="Text" Value="&#10003;"/>
-                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
+                                            <Style.Triggers><DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthGoogle"><Setter Property="Text" Value="&#10003;"/><Setter Property="Foreground" Value="#a6e3a1"/></DataTrigger></Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
                                 <TextBlock Text="Sign in with Google" Margin="8,0,0,0" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Button>
-                        <Button Style="{StaticResource MenuButton}"
-                                Command="{Binding SetLockOAuthCommand}" CommandParameter="Microsoft">
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding SetLockOAuthCommand}" CommandParameter="Microsoft">
                             <DockPanel>
                                 <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="&#9675;"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthMicrosoft">
-                                                    <Setter Property="Text" Value="&#10003;"/>
-                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
+                                            <Style.Triggers><DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthMicrosoft"><Setter Property="Text" Value="&#10003;"/><Setter Property="Foreground" Value="#a6e3a1"/></DataTrigger></Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
                                 <TextBlock Text="Sign in with Microsoft" Margin="8,0,0,0" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Button>
-                        <Button Style="{StaticResource MenuButton}"
-                                Command="{Binding SetLockOAuthCommand}" CommandParameter="Facebook">
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding SetLockOAuthCommand}" CommandParameter="Facebook">
                             <DockPanel>
                                 <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="&#9675;"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthFacebook">
-                                                    <Setter Property="Text" Value="&#10003;"/>
-                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
+                                            <Style.Triggers><DataTrigger Binding="{Binding ActiveLockMethod}" Value="OAuthFacebook"><Setter Property="Text" Value="&#10003;"/><Setter Property="Foreground" Value="#a6e3a1"/></DataTrigger></Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
@@ -474,14 +449,11 @@
                         </Button>
 
                         <Separator Background="#45475a" Margin="4,8"/>
-
-                        <!-- Shared Vaults -->
                         <TextBlock Text="SHARED VAULTS" FontSize="9" FontWeight="Bold"
                                    Foreground="#585b70" Margin="8,0,8,4"/>
                         <Button Style="{StaticResource MenuButton}" Command="{Binding CreateSharedVaultCommand}">
                             <DockPanel>
-                                <TextBlock Text="+" Width="20" TextAlignment="Center" VerticalAlignment="Center"
-                                           FontWeight="Bold" FontSize="14"/>
+                                <TextBlock Text="+" Width="20" TextAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" FontSize="14"/>
                                 <TextBlock Text="Create Vault" Margin="8,0,0,0" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Button>
@@ -510,16 +482,15 @@
                         </ItemsControl>
 
                         <Separator Background="#45475a" Margin="4,8"/>
-
-                        <TextBlock Text="Ctrl+Shift+A  —  show / hide" FontSize="10"
+                        <TextBlock Text="Ctrl+Shift+A  —  show / hide  |  Ctrl+F  —  search" FontSize="10"
                                    Foreground="#585b70" Margin="8,0,8,6" FontStyle="Italic"
                                    HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
             </Popup>
 
-            <!-- Account List with Drag-and-Drop -->
-            <ListBox Grid.Row="1" ItemsSource="{Binding Accounts}"
+            <!-- Account List with Drag-and-Drop + Context Menu -->
+            <ListBox Grid.Row="2" ItemsSource="{Binding FilteredAccountsView}"
                      Background="Transparent" BorderThickness="0"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      HorizontalContentAlignment="Stretch"
@@ -556,6 +527,55 @@
                                 <MouseBinding Gesture="LeftClick"
                                               Command="{Binding CopyToClipboardCommand}"/>
                             </Border.InputBindings>
+
+                            <!-- Right-click context menu -->
+                            <Border.ContextMenu>
+                                <ContextMenu Background="#313244" Foreground="#cdd6f4" BorderBrush="#45475a">
+                                    <MenuItem Header="Copy Code" Click="OnContextCopyCode">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="&#128203;" FontSize="12"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator Background="#45475a"/>
+                                    <MenuItem Header="Move to Vault" Click="OnContextMoveToVault">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="&#8594;" FontSize="13"/>
+                                        </MenuItem.Icon>
+                                        <MenuItem.Style>
+                                            <Style TargetType="MenuItem">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsShared}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </MenuItem.Style>
+                                    </MenuItem>
+                                    <MenuItem Header="Move to Personal" Click="OnContextMoveToLocal">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="&#8592;" FontSize="13"/>
+                                        </MenuItem.Icon>
+                                        <MenuItem.Style>
+                                            <Style TargetType="MenuItem">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsShared}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </MenuItem.Style>
+                                    </MenuItem>
+                                    <Separator Background="#45475a"/>
+                                    <MenuItem Header="Delete" Click="OnContextDelete" Foreground="#f38ba8">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="&#10005;" FontSize="12" Foreground="#f38ba8"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Border.ContextMenu>
+
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -565,15 +585,13 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Drag handle -->
                                 <TextBlock Grid.Column="0" Text="&#9776;" FontSize="14"
                                            Foreground="#585b70" VerticalAlignment="Center"
                                            Margin="0,0,10,0" Cursor="SizeAll"/>
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <DockPanel Margin="0,0,0,2">
-                                        <TextBlock Text="{Binding Issuer}" FontSize="11"
-                                                   Foreground="#a6adc8"/>
+                                        <TextBlock Text="{Binding Issuer}" FontSize="11" Foreground="#a6adc8"/>
                                         <TextBlock Text="{Binding SourceLabel}" FontSize="9"
                                                    Foreground="#585b70" Margin="6,0,0,0"
                                                    VerticalAlignment="Center"/>
@@ -598,7 +616,6 @@
                                                Foreground="#585b70" Margin="0,2,0,0"/>
                                 </StackPanel>
 
-                                <!-- Countdown -->
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,0">
                                     <TextBlock Text="{Binding SecondsRemaining, StringFormat={}{0}s}"
                                                FontSize="14" Foreground="#f9e2af"
@@ -608,7 +625,6 @@
                                                  Foreground="#f9e2af" Background="#45475a"/>
                                 </StackPanel>
 
-                                <!-- Move to vault (personal → vault) -->
                                 <Button Grid.Column="3" Content="&#8594;" FontSize="12"
                                         VerticalAlignment="Center" Margin="4,0,0,0"
                                         ToolTip="Move to shared vault"
@@ -626,7 +642,6 @@
                                     </Button.Style>
                                 </Button>
 
-                                <!-- Move to local (vault → personal) -->
                                 <Button Grid.Column="3" Content="&#8592;" FontSize="12"
                                         VerticalAlignment="Center" Margin="4,0,0,0"
                                         ToolTip="Move to Personal"
@@ -644,7 +659,6 @@
                                     </Button.Style>
                                 </Button>
 
-                                <!-- Delete -->
                                 <Button Grid.Column="4" Content="&#10005;" FontSize="12"
                                         Style="{StaticResource SubtleButton}"
                                         Foreground="#f38ba8" VerticalAlignment="Center"
@@ -657,7 +671,7 @@
             </ListBox>
 
             <!-- Empty state -->
-            <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <StackPanel.Style>
                     <Style TargetType="StackPanel">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -675,12 +689,10 @@
             </StackPanel>
 
             <!-- Add Panel -->
-            <Border Grid.Row="2" Background="#181825" Padding="12"
+            <Border Grid.Row="3" Background="#181825" Padding="12"
                     Visibility="{Binding IsAddPanelVisible, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
                     <TextBlock Text="Add Account" FontWeight="SemiBold" Margin="0,0,0,8"/>
-
-                    <!-- Target vault selector -->
                     <DockPanel Margin="0,0,0,8">
                         <TextBlock Text="Add to:" FontSize="11" Foreground="#a6adc8"
                                    VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -690,8 +702,6 @@
                                   BorderBrush="#45475a" FontSize="12" Padding="6,3"
                                   MinWidth="120"/>
                     </DockPanel>
-
-                    <!-- URI input -->
                     <TextBlock Text="otpauth:// URI:" FontSize="11" Foreground="#a6adc8"/>
                     <DockPanel Margin="0,4,0,6">
                         <Button DockPanel.Dock="Right" Content="Paste" Margin="6,0,0,0"
@@ -703,10 +713,7 @@
                     <Button Content="Add from URI" Style="{StaticResource AccentButton}"
                             Command="{Binding AddFromUriCommand}"
                             HorizontalAlignment="Left" Margin="0,0,0,10"/>
-
                     <Separator Background="#45475a" Margin="0,4"/>
-
-                    <!-- Manual entry -->
                     <TextBlock Text="— or enter manually —" FontSize="11"
                                Foreground="#585b70" HorizontalAlignment="Center" Margin="0,6"/>
                     <TextBlock Text="Issuer (e.g. GitHub):" FontSize="11" Foreground="#a6adc8"/>
@@ -725,7 +732,7 @@
             </Border>
 
             <!-- Status bar -->
-            <Border Grid.Row="3" Background="#181825" Padding="12,6">
+            <Border Grid.Row="4" Background="#181825" Padding="12,6">
                 <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="#a6adc8"/>
             </Border>
         </Grid>
