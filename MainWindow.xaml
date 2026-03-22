@@ -286,14 +286,13 @@
             <Border Grid.Row="1" Background="#181825" Padding="12,4,12,8">
                 <TextBox x:Name="SearchBox" 
                      Style="{StaticResource InputBox}"
-                     Tag="🔍 Search accounts (Ctrl+F)"
+                     Tag="&#128269; Search accounts (Ctrl+F)"
                      Height="30"
                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                      FontSize="12" Padding="8,5"
                      WindowChrome.IsHitTestVisibleInChrome="True">
                     <TextBox.Template>
                         <ControlTemplate TargetType="TextBox">
-                            <!-- Grid handles the layering without adding extra height -->
                             <Grid Height="{TemplateBinding Height}" VerticalAlignment="{TemplateBinding VerticalAlignment}">
                                 <Border x:Name="border" 
                         Background="{TemplateBinding Background}" 
@@ -328,7 +327,7 @@
                 </TextBox>
             </Border>
 
-            <!-- Menu Popup (unchanged, targets MenuBtn) -->
+            <!-- Menu Popup -->
             <Popup x:Name="MenuPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=MenuBtn}"
                    StaysOpen="False" AllowsTransparency="True">
                 <Border Background="#313244" CornerRadius="6" Padding="8"
@@ -514,7 +513,7 @@
                         </ItemsControl>
 
                         <Separator Background="#45475a" Margin="4,8"/>
-                        <TextBlock Text="Ctrl+Shift+A  —  show / hide  |  Ctrl+F  —  search" FontSize="10"
+                        <TextBlock Text="Ctrl+Shift+A  &#8212;  show / hide  |  Ctrl+F  &#8212;  search" FontSize="10"
                                    Foreground="#585b70" Margin="8,0,8,6" FontStyle="Italic"
                                    HorizontalAlignment="Center"/>
                     </StackPanel>
@@ -628,12 +627,18 @@
                                                    Foreground="#585b70" Margin="6,0,0,0"
                                                    VerticalAlignment="Center"/>
                                     </DockPanel>
-                                    <TextBlock FontSize="28" FontWeight="Bold"
-                                               FontFamily="Cascadia Mono, Consolas">
+                                    <!-- TOTP code: color varies by source (green=personal, mauve=vault) -->
+                                    <TextBlock x:Name="CodeText" FontSize="28" FontWeight="Bold"
+                                               FontFamily="Cascadia Mono, Consolas"
+                                               Text="{Binding FormattedCode}"
+                                               Tag="{Binding CodeColor}">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="#a6e3a1"/>
-                                                <Setter Property="Text" Value="{Binding FormattedCode}"/>
+                                                <Setter Property="Foreground">
+                                                    <Setter.Value>
+                                                        <SolidColorBrush Color="{Binding CodeColor}"/>
+                                                    </Setter.Value>
+                                                </Setter>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding JustCopied}" Value="True">
                                                         <Setter Property="Text" Value="Copied!"/>
@@ -746,7 +751,7 @@
                             Command="{Binding AddFromUriCommand}"
                             HorizontalAlignment="Left" Margin="0,0,0,10"/>
                     <Separator Background="#45475a" Margin="0,4"/>
-                    <TextBlock Text="— or enter manually —" FontSize="11"
+                    <TextBlock Text="&#8212; or enter manually &#8212;" FontSize="11"
                                Foreground="#585b70" HorizontalAlignment="Center" Margin="0,6"/>
                     <TextBlock Text="Issuer (e.g. GitHub):" FontSize="11" Foreground="#a6adc8"/>
                     <TextBox Text="{Binding ManualIssuer, UpdateSourceTrigger=PropertyChanged}"
