@@ -67,7 +67,8 @@
     <AppxBundlePlatforms>x64</AppxBundlePlatforms>
     <AppInstallerUri>C:\SOURCE\WardLock_Package</AppInstallerUri>
     <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
-    <AppxPackageSigningTimestampServerUrl>https://time.windows.com</AppxPackageSigningTimestampServerUrl>
+    <!-- RFC 3161 timestamp server (DigiCert, free, reliable) -->
+    <AppxPackageSigningTimestampServerUrl>http://timestamp.digicert.com</AppxPackageSigningTimestampServerUrl>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <AppxBundle>Always</AppxBundle>
