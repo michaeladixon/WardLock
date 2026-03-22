@@ -83,11 +83,11 @@ Write-Host "[OK] Certificate created in CurrentUser\My" -ForegroundColor Green
 Write-Host "     Thumbprint: $($cert.Thumbprint)" -ForegroundColor White
 Write-Host "     Expires:    $($cert.NotAfter.ToString('yyyy-MM-dd'))" -ForegroundColor DarkGray
 
-# Export to .pfx with an empty string password for max compatibility.
-# -NoPassword only exists on newer Windows builds; empty password works everywhere
-# and MSBuild handles it without needing PackageCertificatePassword in the wapproj.
-$emptyPw = ConvertTo-SecureString -String "" -Force -AsPlainText
-Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $emptyPw | Out-Null
+# Export to .pfx - use a trivial single-space password for compatibility.
+# ConvertTo-SecureString rejects empty strings, and -NoPassword does not
+# exist on older Windows builds, so a single space is the safest portable option.
+$trivialPw = ConvertTo-SecureString -String " " -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $trivialPw | Out-Null
 Write-Host "[OK] Exported to $pfxPath" -ForegroundColor Green
 
 # Install to TrustedPeople so sideload works without manual cert install
