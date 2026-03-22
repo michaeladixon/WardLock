@@ -10,7 +10,8 @@
       "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\SOURCE\\\\WinAuth\\\\rename2.ps1\")",
       "Bash(dotnet restore:*)",
       "Bash(msbuild:*)",
-      "Bash(dotnet msbuild:*)"
+      "Bash(dotnet msbuild:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"WardLock_Installer\\\\generate-icons.ps1\")"
     ]
   }
 }

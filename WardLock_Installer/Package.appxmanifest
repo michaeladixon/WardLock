@@ -9,7 +9,7 @@
   <Identity
     Name="WardLock.7099FF6D2838"
     Publisher="CN=WardLock"
-    Version="1.0.14.0" />
+    Version="1.0.17.0" />
 
   <Properties>
     <DisplayName>WardLock</DisplayName>
