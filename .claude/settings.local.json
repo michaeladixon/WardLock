@@ -7,7 +7,10 @@
       "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\SOURCE\\\\WinAuth\\\\make-icon.ps1\")",
       "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\SOURCE\\\\WinAuth\\\\rename.ps1\")",
       "Bash(ls \"C:\\\\SOURCE\\\\WinAuth\\\\\"*.csproj 2>/dev/null && grep -r \"winauth\" C:\\\\SOURCE\\\\WinAuth --include=\"*.cs\" --include=\"*.xaml\" -l)",
-      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\SOURCE\\\\WinAuth\\\\rename2.ps1\")"
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\SOURCE\\\\WinAuth\\\\rename2.ps1\")",
+      "Bash(dotnet restore:*)",
+      "Bash(msbuild:*)",
+      "Bash(dotnet msbuild:*)"
     ]
   }
 }

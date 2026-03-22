@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -10,11 +10,37 @@
     <ApplicationIcon>shield.ico</ApplicationIcon>
     <RootNamespace>WardLock</RootNamespace>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)\obj\</BaseIntermediateOutputPath>
+    <StartupObject>WardLock.App</StartupObject>
+    <Copyright>WardLock 2026</Copyright>
+    <PackageIcon>shield.ico</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/michaeladixon/WardLock</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <SignAssembly>True</SignAssembly>
   </PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
+		<PlatformTarget>x86</PlatformTarget>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+		<PlatformTarget>x64</PlatformTarget>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <None Remove="WardLock_Installer\obj\project.assets.json" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Include="WardLock_Installer\obj\project.assets.json">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
 
   <ItemGroup>
     <!-- Shield icon as WPF pack resource (Window.Icon + tray) -->
-    <Resource Include="shield.ico"/>
+    <Resource Include="shield.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,6 +52,17 @@
     <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.14" />
     <!-- System tray icon -->
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Update="shield.ico">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>
