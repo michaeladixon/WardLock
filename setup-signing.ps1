@@ -9,15 +9,12 @@
         powershell -ExecutionPolicy Bypass -File setup-signing.ps1
 
     It creates:
-      - WardLock.snk           (strong name key for assembly signing)
-      - WardLock_Installer\WardLock_Signing.pfx  (MSIX package signing cert)
+      - WardLock.snk                              (strong name key)
+      - WardLock_Installer\WardLock_Signing.pfx   (MSIX signing cert)
 
     And installs the cert into:
       - Cert:\CurrentUser\My            (so MSBuild can sign with it)
-      - Cert:\LocalMachine\TrustedPeople (so sideload installs without errors)
-
-    After running, update PackageCertificateThumbprint in the .wapproj if
-    prompted (the script prints it). Then rebuild the installer project.
+      - Cert:\LocalMachine\TrustedPeople (so sideload installs work)
 #>
 
 Set-StrictMode -Version Latest
@@ -27,28 +24,26 @@ $repoRoot       = $PSScriptRoot
 $snkPath        = Join-Path $repoRoot 'WardLock.snk'
 $pfxPath        = Join-Path $repoRoot 'WardLock_Installer\WardLock_Signing.pfx'
 $pfxPassword    = 'WardLock2026!'
-$certSubject    = 'CN=WardLock'   # Must match Package.appxmanifest Identity Publisher
+$certSubject    = 'CN=WardLock'
 
-# ── 1. Strong Name Key ────────────────────────────────────────────────────────
+# ---------- 1. Strong Name Key ------------------------------------------------
+
 if (Test-Path $snkPath) {
-    Write-Host "[OK] WardLock.snk already exists — skipping." -ForegroundColor Green
-} else {
+    Write-Host "[OK] WardLock.snk already exists - skipping." -ForegroundColor Green
+}
+else {
     Write-Host "Generating strong name key..." -ForegroundColor Cyan
 
-    # Try sn.exe first (ships with VS / Windows SDK)
     $sn = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows" `
               -Recurse -Filter 'sn.exe' -ErrorAction SilentlyContinue |
-          Sort-Object FullName -Descending | Select-Object -First 1
+          Sort-Object FullName -Descending |
+          Select-Object -First 1
 
     if ($sn) {
         & $sn.FullName -k $snkPath
-    } else {
-        # Fallback: use .NET crypto API directly (no sn.exe needed)
-        Write-Host "  sn.exe not found — generating via .NET RSA API..." -ForegroundColor Yellow
-        $rsa = [System.Security.Cryptography.RSA]::Create(2048)
-        $keyBytes = $rsa.ExportRSAPrivateKey()
-        # SNK format is just the raw PKCS#1 RSA private key blob
-        # But the easiest route is the CryptoServiceProvider export
+    }
+    else {
+        Write-Host "  sn.exe not found - generating via .NET RSA API..." -ForegroundColor Yellow
         $csp = New-Object System.Security.Cryptography.RSACryptoServiceProvider(2048)
         [System.IO.File]::WriteAllBytes($snkPath, $csp.ExportCspBlob($true))
         $csp.Dispose()
@@ -56,20 +51,25 @@ if (Test-Path $snkPath) {
 
     if (Test-Path $snkPath) {
         Write-Host "[OK] Created $snkPath" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Error "Failed to create WardLock.snk"
     }
 }
 
-# ── 2. Self-Signed MSIX Signing Certificate ───────────────────────────────────
-Write-Host "`nGenerating self-signed certificate for MSIX package signing..." -ForegroundColor Cyan
+# ---------- 2. Self-Signed MSIX Signing Certificate ---------------------------
+
+Write-Host ""
+Write-Host "Generating self-signed certificate for MSIX package signing..." -ForegroundColor Cyan
 Write-Host "  Subject: $certSubject (must match Package.appxmanifest Publisher)" -ForegroundColor DarkGray
 
 # Remove any old certs with same subject to keep things clean
-Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $certSubject } | ForEach-Object {
-    Write-Host "  Removing old cert: $($_.Thumbprint)" -ForegroundColor Yellow
-    Remove-Item $_.PSPath -Force
-}
+Get-ChildItem Cert:\CurrentUser\My |
+    Where-Object { $_.Subject -eq $certSubject } |
+    ForEach-Object {
+        Write-Host "  Removing old cert: $($_.Thumbprint)" -ForegroundColor Yellow
+        Remove-Item $_.PSPath -Force
+    }
 
 $cert = New-SelfSignedCertificate `
     -Type Custom `
@@ -96,23 +96,29 @@ Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\LocalMachine\Tru
 Remove-Item $cerPath -Force
 Write-Host "[OK] Installed to LocalMachine\TrustedPeople (sideloading will work)" -ForegroundColor Green
 
-# ── 3. Update wapproj with new thumbprint ─────────────────────────────────────
+# ---------- 3. Update wapproj with new thumbprint ----------------------------
+
 $waprojPath = Join-Path $repoRoot 'WardLock_Installer\WardLock_Installer.wapproj'
 if (Test-Path $waprojPath) {
     $content = Get-Content $waprojPath -Raw
+    $thumbTag = '<PackageCertificateThumbprint>'
+    $newTag   = $thumbTag + $cert.Thumbprint + '</PackageCertificateThumbprint>'
+
     if ($content -match 'PackageCertificateThumbprint') {
-        $content = $content -replace '<PackageCertificateThumbprint>[^<]*</PackageCertificateThumbprint>',
-            "<PackageCertificateThumbprint>$($cert.Thumbprint)</PackageCertificateThumbprint>"
+        $content = $content -replace '<PackageCertificateThumbprint>[^<]*</PackageCertificateThumbprint>', $newTag
         Set-Content $waprojPath -Value $content -Encoding UTF8
         Write-Host "[OK] Updated PackageCertificateThumbprint in wapproj" -ForegroundColor Green
-    } else {
-        Write-Host "[WARN] No PackageCertificateThumbprint found in wapproj — add it manually:" -ForegroundColor Yellow
-        Write-Host "       <PackageCertificateThumbprint>$($cert.Thumbprint)</PackageCertificateThumbprint>" -ForegroundColor White
+    }
+    else {
+        Write-Host "[WARN] No PackageCertificateThumbprint found in wapproj. Add manually:" -ForegroundColor Yellow
+        Write-Host "       $newTag" -ForegroundColor White
     }
 }
 
-# ── Summary ───────────────────────────────────────────────────────────────────
-Write-Host "`n=== Setup Complete ===" -ForegroundColor Cyan
+# ---------- Summary -----------------------------------------------------------
+
+Write-Host ""
+Write-Host "=== Setup Complete ===" -ForegroundColor Cyan
 Write-Host "Thumbprint:  $($cert.Thumbprint)" -ForegroundColor White
 Write-Host "SNK:         $snkPath" -ForegroundColor White
 Write-Host "PFX:         $pfxPath" -ForegroundColor White
@@ -122,4 +128,4 @@ Write-Host "  1. Rebuild:  dotnet build -c Release -r win-x64" -ForegroundColor 
 Write-Host "  2. Publish:  Right-click WardLock_Installer > Publish > Create App Packages" -ForegroundColor White
 Write-Host "  3. Install:  Run the .msixbundle from the output folder" -ForegroundColor White
 Write-Host ""
-Write-Host "The .snk and .pfx are in .gitignore — do NOT commit them." -ForegroundColor Yellow
+Write-Host "The .snk and .pfx are gitignored - do NOT commit them." -ForegroundColor Yellow
