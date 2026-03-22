@@ -284,15 +284,47 @@
 
             <!-- Search Bar -->
             <Border Grid.Row="1" Background="#181825" Padding="12,4,12,8">
-                <TextBox x:Name="SearchBox" Style="{StaticResource InputBox}"
-                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="12" Padding="8,5"
-                         WindowChrome.IsHitTestVisibleInChrome="True">
-                    <TextBox.Style>
-                        <Style TargetType="TextBox" BasedOn="{StaticResource InputBox}">
-                            <Setter Property="Tag" Value="&#128269; Search accounts (Ctrl+F)"/>
-                        </Style>
-                    </TextBox.Style>
+                <TextBox x:Name="SearchBox" 
+                     Style="{StaticResource InputBox}"
+                     Tag="🔍 Search accounts (Ctrl+F)"
+                     Height="30"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                     FontSize="12" Padding="8,5"
+                     WindowChrome.IsHitTestVisibleInChrome="True">
+                    <TextBox.Template>
+                        <ControlTemplate TargetType="TextBox">
+                            <!-- Grid handles the layering without adding extra height -->
+                            <Grid Height="{TemplateBinding Height}" VerticalAlignment="{TemplateBinding VerticalAlignment}">
+                                <Border x:Name="border" 
+                        Background="{TemplateBinding Background}" 
+                        BorderBrush="{TemplateBinding BorderBrush}" 
+                        BorderThickness="{TemplateBinding BorderThickness}" 
+                        SnapsToDevicePixels="True">
+                                    <ScrollViewer x:Name="PART_ContentHost" 
+                                  Focusable="false" 
+                                  HorizontalScrollBarVisibility="Hidden" 
+                                  VerticalScrollBarVisibility="Hidden"
+                                  VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock x:Name="Placeholder"
+                           Text="{TemplateBinding Tag}"
+                           Foreground="DarkGray"
+                           IsHitTestVisible="False"
+                           VerticalAlignment="Center"
+                           Padding="{TemplateBinding Padding}" 
+                           Visibility="Collapsed"/>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="Text" Value=""/>
+                                        <Condition Property="IsKeyboardFocusWithin" Value="False"/>
+                                    </MultiTrigger.Conditions>
+                                    <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
+                                </MultiTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </TextBox.Template>
                 </TextBox>
             </Border>
 

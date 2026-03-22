@@ -14,10 +14,10 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly AccountStore _store = new();
     private readonly DispatcherTimer _timer;
-    private readonly List<SharedVaultService> _openVaults = [];
+    private readonly List<SharedVaultService> _openVaults = new();
 
-    public ObservableCollection<AccountViewModel> Accounts { get; } = [];
-    public ObservableCollection<string> OpenVaultNames { get; } = [];
+    public ObservableCollection<AccountViewModel> Accounts { get; } = new();
+    public ObservableCollection<string> OpenVaultNames { get; } = new();
 
     [ObservableProperty]
     private string _otpAuthInput = string.Empty;
@@ -58,7 +58,11 @@ public partial class MainViewModel : ObservableObject
     public Action? MinimizeWindow { get; set; }
     public Action? RestoreWindow  { get; set; }
 
-    public ObservableCollection<string> AddTargetOptions { get; } = ["Personal"];
+    public ObservableCollection<string> AddTargetOptions { get; } = new() { "Personal" };
+
+    // Coordinators to move large feature blocks out of this file
+    private readonly Services.SharedVaultCoordinator _vaultCoordinator;
+    private readonly Services.QrCoordinator _qrCoordinator;
 
     public MainViewModel()
     {
@@ -66,6 +70,9 @@ public partial class MainViewModel : ObservableObject
         _timer.Tick += (_, _) => RefreshAll();
 
         _ = InitializeAsync();
+        // instantiate coordinators after basic fields are constructed
+        _vaultCoordinator = new Services.SharedVaultCoordinator(_openVaults, Accounts, OpenVaultNames, AddTargetOptions, _store, s => StatusMessage = s);
+        _qrCoordinator = new Services.QrCoordinator(_store, Accounts, () => GetSelectedVault(), s => StatusMessage = s);
     }
 
     private async Task InitializeAsync()

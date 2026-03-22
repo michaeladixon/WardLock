@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
+using WardLock.Services;
 
 namespace WardLock.ViewModels;
 
@@ -60,9 +61,9 @@ public partial class MainViewModel
     private void CheckIdleTimeout()
     {
         if (!IsUnlocked) return;
-        if (ActiveLockMethod == Services.LockMethod.None) return;
+        if (ActiveLockMethod == LockMethod.None) return;
 
-        var timeout = Services.AppSettings.AutoLockTimeoutMinutes;
+        var timeout = AppSettings.AutoLockTimeoutMinutes;
         if (timeout <= 0) return;
 
         if ((DateTime.UtcNow - _lastActivityTime).TotalMinutes >= timeout)
@@ -84,12 +85,12 @@ public partial class MainViewModel
         IsUnlocked = false;
         StatusMessage = ActiveLockMethod switch
         {
-            Services.LockMethod.Password      => "Locked after inactivity. Enter your password.",
-            Services.LockMethod.WindowsHello   => "Locked after inactivity. Verify with Windows Hello.",
-            Services.LockMethod.OAuthGoogle    => "Locked after inactivity. Sign in with Google.",
-            Services.LockMethod.OAuthMicrosoft => "Locked after inactivity. Sign in with Microsoft.",
-            Services.LockMethod.OAuthFacebook  => "Locked after inactivity. Sign in with Facebook.",
-            _                                  => "Locked."
+            LockMethod.Password      => "Locked after inactivity. Enter your password.",
+            LockMethod.WindowsHello => "Locked after inactivity. Verify with Windows Hello.",
+            LockMethod.OAuthGoogle    => "Locked after inactivity. Sign in with Google.",
+            LockMethod.OAuthMicrosoft => "Locked after inactivity. Sign in with Microsoft.",
+            LockMethod.OAuthFacebook  => "Locked after inactivity. Sign in with Facebook.",
+            _                         => "Locked."
         };
     }
 }
