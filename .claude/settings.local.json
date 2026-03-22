@@ -11,7 +11,14 @@
       "Bash(dotnet restore:*)",
       "Bash(msbuild:*)",
       "Bash(dotnet msbuild:*)",
-      "Bash(powershell -ExecutionPolicy Bypass -File \"WardLock_Installer\\\\generate-icons.ps1\")"
+      "Bash(powershell -ExecutionPolicy Bypass -File \"WardLock_Installer\\\\generate-icons.ps1\")",
+      "Bash(find . -type f -exec ls -lh {})",
+      "Bash(2)",
+      "Bash(du -sh /c/SOURCE/WardLock/*)",
+      "Bash(wc -l /c/SOURCE/WardLock/Views/*.xaml /c/SOURCE/WardLock/Views/*.cs /c/SOURCE/WardLock/Models/*.cs /c/SOURCE/WardLock/Services/*.cs)",
+      "Bash(ls:*)",
+      "Bash(find /c/SOURCE/WardLock -type f \\\\\\( -name \"*.cs\" -o -name \"*.xaml\" \\\\\\) ! -path \"*/bin/*\" ! -path \"*/obj/*\" ! -path \"*/.vs/*\" ! -path \"*/.github/*\" -exec wc -l {} +)",
+      "Bash(xargs wc:*)"
     ]
   }
 }
