@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -19,14 +19,36 @@
     <RepositoryType>git</RepositoryType>
     <SignAssembly>True</SignAssembly>
     <AssemblyOriginatorKeyFile>WardLock.snk</AssemblyOriginatorKeyFile>
+    <DefaultLanguage>en</DefaultLanguage>
+      <!-- MSIX Packaging - managed by build-msix.ps1 -->
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <PackageCertificateThumbprint>95C991CC44404523742D5F1680BBEC7812917CF9</PackageCertificateThumbprint>
+    <AppxBundle>Never</AppxBundle>
+    <AppxPackageDir>bin\Release\AppPackages\</AppxPackageDir>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
     <PlatformTarget>x86</PlatformTarget>
+      <!-- MSIX Packaging - managed by build-msix.ps1 -->
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <PackageCertificateThumbprint>95C991CC44404523742D5F1680BBEC7812917CF9</PackageCertificateThumbprint>
+    <AppxBundle>Never</AppxBundle>
+    <AppxPackageDir>bin\Release\AppPackages\</AppxPackageDir>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <PlatformTarget>x64</PlatformTarget>
+      <!-- MSIX Packaging - managed by build-msix.ps1 -->
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <PackageCertificateThumbprint>95C991CC44404523742D5F1680BBEC7812917CF9</PackageCertificateThumbprint>
+    <AppxBundle>Never</AppxBundle>
+    <AppxPackageDir>bin\Release\AppPackages\</AppxPackageDir>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -56,4 +78,9 @@
     </None>
   </ItemGroup>
 
+
+  <ItemGroup>
+    <!-- MSIX visual assets -->
+    <Content Include="Images\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
