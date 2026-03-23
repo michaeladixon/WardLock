@@ -16,8 +16,12 @@
 .PARAMETER RunWack
     Run Windows App Certification Kit after build.
 
+.PARAMETER Store
+    Build for Microsoft Store submission. Uses the Store publisher identity
+    and skips local signing (the Store re-signs on upload).
+
 .PARAMETER CertSubject
-    Certificate CN. Must match Package.appxmanifest Publisher.
+    Certificate CN for local/sideload builds.
     Default: CN=WardLock-Dev
 
 .PARAMETER Version
@@ -25,6 +29,7 @@
 
 .EXAMPLE
     .\build-msix.ps1
+    .\build-msix.ps1 -Store -Version "1.0.0.0"
     .\build-msix.ps1 -RunWack
     .\build-msix.ps1 -Version "1.2.0.0" -SkipCert -SkipAssets
 #>
@@ -34,6 +39,7 @@ param(
     [switch]$SkipCert,
     [switch]$SkipAssets,
     [switch]$RunWack,
+    [switch]$Store,
     [string]$CertSubject = 'CN=WardLock-Dev',
     [string]$Version = '1.0.0.0'
 )
@@ -47,11 +53,28 @@ $ImagesDir    = Join-Path $ProjectRoot 'Images'
 # UTF-8 without BOM encoder - MakeAppx requires this
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-Write-Host ''
-Write-Host '========================================' -ForegroundColor Cyan
-Write-Host '  WardLock MSIX Build Pipeline' -ForegroundColor Cyan
-Write-Host '========================================' -ForegroundColor Cyan
-Write-Host ''
+# Store identity constants (from Partner Center)
+$StoreIdentityName      = 'WardLock.2016598EF4F62'
+$StorePublisher         = 'CN=97B9569C-01A0-4039-B76E-20A7FC45FC08'
+$StorePublisherDisplay  = 'WardLock'
+
+# If -Store, override publisher to the Store identity and skip local cert
+if ($Store) {
+    $CertSubject = $StorePublisher
+    $SkipCert = $true
+    Write-Host '' -ForegroundColor Cyan
+    Write-Host '========================================' -ForegroundColor Cyan
+    Write-Host '  WardLock MSIX - STORE BUILD' -ForegroundColor Cyan
+    Write-Host '========================================' -ForegroundColor Cyan
+    Write-Host ''
+}
+else {
+    Write-Host ''
+    Write-Host '========================================' -ForegroundColor Cyan
+    Write-Host '  WardLock MSIX Build Pipeline' -ForegroundColor Cyan
+    Write-Host '========================================' -ForegroundColor Cyan
+    Write-Host ''
+}
 
 # ------------------------------------------------------------------------------
 # Helper: find a tool in the Windows SDK
@@ -75,13 +98,17 @@ if (-not $makeAppx) {
     Write-Error 'makeappx.exe not found. Install the Windows 10/11 SDK.'
     exit 1
 }
-if (-not $signTool) {
+
+# SignTool only required for non-Store builds
+if (-not $Store -and -not $signTool) {
     Write-Error 'signtool.exe not found. Install the Windows 10/11 SDK.'
     exit 1
 }
 
 Write-Host ('  makeappx: ' + $makeAppx) -ForegroundColor DarkGray
-Write-Host ('  signtool: ' + $signTool) -ForegroundColor DarkGray
+if ($signTool) {
+    Write-Host ('  signtool: ' + $signTool) -ForegroundColor DarkGray
+}
 
 # ------------------------------------------------------------------------------
 # 1. Stamp version and publisher into Package.appxmanifest (XML-safe)
@@ -94,7 +121,6 @@ if (-not (Test-Path $ManifestPath)) {
 
 Write-Host '[1/7] Stamping version into manifest...' -ForegroundColor Yellow
 
-# Use proper XML parsing to avoid corrupting the XML declaration or other attributes
 $mfXml = New-Object System.Xml.XmlDocument
 $mfXml.PreserveWhitespace = $true
 $mfXml.Load($ManifestPath)
@@ -106,6 +132,17 @@ $identity = $mfXml.SelectSingleNode('//m:Identity', $nsMgr)
 if ($identity) {
     $identity.SetAttribute('Version', $Version)
     $identity.SetAttribute('Publisher', $CertSubject)
+    if ($Store) {
+        $identity.SetAttribute('Name', $StoreIdentityName)
+    }
+}
+
+# Also stamp PublisherDisplayName for Store builds
+if ($Store) {
+    $pubDisplay = $mfXml.SelectSingleNode('//m:Properties/m:PublisherDisplayName', $nsMgr)
+    if ($pubDisplay) {
+        $pubDisplay.InnerText = $StorePublisherDisplay
+    }
 }
 
 # Save as UTF-8 without BOM
@@ -122,14 +159,20 @@ $writer.Close()
 $stream.Close()
 
 Write-Host ('  Version: ' + $Version + ' | Publisher: ' + $CertSubject) -ForegroundColor DarkGray
+if ($Store) {
+    Write-Host ('  Identity Name: ' + $StoreIdentityName) -ForegroundColor DarkGray
+}
 
 # ------------------------------------------------------------------------------
-# 2. Create or locate signing certificate
+# 2. Create or locate signing certificate (skipped for Store builds)
 # ------------------------------------------------------------------------------
 
 $Thumbprint = $null
 
-if (-not $SkipCert) {
+if ($Store) {
+    Write-Host '[2/7] Skipping certificate (Store build - Microsoft re-signs)...' -ForegroundColor DarkGray
+}
+elseif (-not $SkipCert) {
     Write-Host '[2/7] Setting up code-signing certificate...' -ForegroundColor Yellow
 
     $existing = Get-ChildItem Cert:\CurrentUser\My | Where-Object {
@@ -188,7 +231,9 @@ else {
     }
 }
 
-Write-Host ('  Thumbprint: ' + $Thumbprint) -ForegroundColor Green
+if ($Thumbprint) {
+    Write-Host ('  Thumbprint: ' + $Thumbprint) -ForegroundColor Green
+}
 
 # ------------------------------------------------------------------------------
 # 3. Generate MSIX visual assets
@@ -258,7 +303,6 @@ else {
 
 # ------------------------------------------------------------------------------
 # 4. Remove single-project MSIX properties from csproj (if present)
-#    WPF does not support single-project MSIX; these cause silent no-output.
 # ------------------------------------------------------------------------------
 
 Write-Host '[4/7] Cleaning csproj of unsupported MSIX properties...' -ForegroundColor Yellow
@@ -280,7 +324,6 @@ foreach ($pat in $removePatterns) {
     }
 }
 
-# Remove PackageCertificateThumbprint and AppxPackageDir lines
 if ($csproj -match '<PackageCertificateThumbprint>') {
     $csproj = $csproj -replace '\s*<PackageCertificateThumbprint>[^<]*</PackageCertificateThumbprint>', ''
     $dirty = $true
@@ -291,7 +334,6 @@ if ($csproj -match '<AppxPackageDir>') {
 }
 
 if ($dirty) {
-    # Clean up empty lines left behind
     $csproj = ($csproj -split "`n" | Where-Object { $_.Trim() -ne '' }) -join "`n"
     [System.IO.File]::WriteAllText($CsprojPath, $csproj, $Utf8NoBom)
     Write-Host '  Removed unsupported single-project MSIX properties' -ForegroundColor DarkGray
@@ -301,7 +343,7 @@ else {
 }
 
 # ------------------------------------------------------------------------------
-# 5. dotnet publish (produces the layout folder)
+# 5. dotnet publish
 # ------------------------------------------------------------------------------
 
 Write-Host '[5/7] Publishing WardLock...' -ForegroundColor Yellow
@@ -327,13 +369,11 @@ Write-Host ('  Published to: ' + $publishDir) -ForegroundColor DarkGray
 
 Write-Host '[6/7] Assembling MSIX package...' -ForegroundColor Yellow
 
-# Copy manifest and assets into the publish layout
 Copy-Item $ManifestPath (Join-Path $publishDir 'AppxManifest.xml') -Force
 $destImages = Join-Path $publishDir 'Images'
 if (-not (Test-Path $destImages)) { New-Item $destImages -ItemType Directory | Out-Null }
 Copy-Item (Join-Path $ImagesDir '*') $destImages -Force
 
-# Create a mapping file for MakeAppx
 $mappingFile = Join-Path $ProjectRoot 'AppxMapping.ini'
 $mappingLines = @('[Files]')
 
@@ -348,7 +388,6 @@ foreach ($f in $pubFiles) {
 
 $msixOutput = Join-Path $ProjectRoot ('WardLock_' + $Version + '.msix')
 
-# Remove old package if it exists
 if (Test-Path $msixOutput) { Remove-Item $msixOutput -Force }
 
 & $makeAppx pack /f $mappingFile /p $msixOutput /o
@@ -358,19 +397,23 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# Clean up mapping file
 Remove-Item $mappingFile -ErrorAction SilentlyContinue
 
-# Sign the package
-Write-Host '  Signing MSIX...' -ForegroundColor DarkGray
-& $signTool sign /fd SHA256 /sha1 $Thumbprint /td SHA256 $msixOutput
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Warning '  SignTool failed. The MSIX was created but is unsigned.'
-    Write-Host '  You may need to run as admin or check certificate is in CurrentUser\My' -ForegroundColor DarkGray
+# Sign the package (skip for Store builds - Microsoft re-signs on upload)
+if ($Store) {
+    Write-Host '  Skipping signing (Store re-signs on upload)' -ForegroundColor DarkGray
 }
-else {
-    Write-Host '  Package signed successfully' -ForegroundColor DarkGray
+elseif ($Thumbprint) {
+    Write-Host '  Signing MSIX...' -ForegroundColor DarkGray
+    & $signTool sign /fd SHA256 /sha1 $Thumbprint /td SHA256 $msixOutput
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning '  SignTool failed. The MSIX was created but is unsigned.'
+        Write-Host '  You may need to run as admin or check certificate is in CurrentUser\My' -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host '  Package signed successfully' -ForegroundColor DarkGray
+    }
 }
 
 $sizeMB = [math]::Round((Get-Item $msixOutput).Length / 1MB, 2)
@@ -387,7 +430,6 @@ if ($RunWack) {
 
     $wackPath = Find-SdkTool 'appcert.exe'
     if (-not $wackPath) {
-        # Try the known path
         $wackPath = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\App Certification Kit\appcert.exe'
     }
 
@@ -434,20 +476,26 @@ Write-Host ''
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host '  Build Complete' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
-Write-Host ('  Certificate:  ' + $Thumbprint)
+if ($Store) {
+    Write-Host ('  Mode:         Store Submission') -ForegroundColor Yellow
+    Write-Host ('  Identity:     ' + $StoreIdentityName)
+}
+if ($Thumbprint) {
+    Write-Host ('  Certificate:  ' + $Thumbprint)
+}
 Write-Host ('  Publisher:    ' + $CertSubject)
 Write-Host ('  Version:      ' + $Version)
 Write-Host ('  Config:       ' + $Configuration)
 Write-Host ('  Package:      ' + $msixOutput) -ForegroundColor Green
 Write-Host ''
-Write-Host '  Next steps:' -ForegroundColor Yellow
-Write-Host '    Sideload:     Add-AppxPackage -Path .\WardLock_1.0.0.0.msix' -ForegroundColor DarkGray
-Write-Host '    Store submit: Upload MSIX to Partner Center' -ForegroundColor DarkGray
-Write-Host '    Run WACK:     .\build-msix.ps1 -RunWack -SkipCert -SkipAssets' -ForegroundColor DarkGray
+if ($Store) {
+    Write-Host '  Next step:' -ForegroundColor Yellow
+    Write-Host '    Upload to Partner Center -> Your App -> Packages' -ForegroundColor DarkGray
+}
+else {
+    Write-Host '  Next steps:' -ForegroundColor Yellow
+    Write-Host '    Sideload:     Add-AppxPackage -Path .\WardLock_1.0.0.0.msix' -ForegroundColor DarkGray
+    Write-Host '    Store build:  .\build-msix.ps1 -Store -Version "1.0.0.0"' -ForegroundColor DarkGray
+    Write-Host '    Run WACK:     .\build-msix.ps1 -RunWack -SkipCert -SkipAssets' -ForegroundColor DarkGray
+}
 Write-Host ''
-
-# Find your cert and trust it
-$cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq 'CN=WardLock-Dev' } | Select-Object -First 1
-Export-Certificate -Cert $cert -FilePath "$env:TEMP\wardlock-dev.cer" | Out-Null
-Import-Certificate -FilePath "$env:TEMP\wardlock-dev.cer" -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople'
-Remove-Item "$env:TEMP\wardlock-dev.cer"
