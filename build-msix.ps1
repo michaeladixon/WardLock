@@ -207,6 +207,7 @@ Write-Host '[4/6] Patching csproj for MSIX build...' -ForegroundColor Yellow
 $csproj = Get-Content $CsprojPath -Raw
 
 if ($csproj -notmatch 'WindowsPackageType') {
+    # Only inject into the FIRST (unconditional) PropertyGroup using regex
     $msixLines = @(
         '    <!-- MSIX Packaging - managed by build-msix.ps1 -->'
         '    <WindowsPackageType>MSIX</WindowsPackageType>'
@@ -217,11 +218,21 @@ if ($csproj -notmatch 'WindowsPackageType') {
         '    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>'
     )
     $msixBlock = [string]::Join("`n", $msixLines)
-    $csproj = $csproj.Replace('</PropertyGroup>', $msixBlock + "`n  </PropertyGroup>")
+
+    # Use regex to replace only the FIRST occurrence of </PropertyGroup>
+    $pattern = '</PropertyGroup>'
+    $idx = $csproj.IndexOf($pattern)
+    if ($idx -ge 0) {
+        $before = $csproj.Substring(0, $idx)
+        $after  = $csproj.Substring($idx + $pattern.Length)
+        $csproj = $before + $msixBlock + "`n  " + $pattern + $after
+    }
+
     Set-Content $CsprojPath -Value $csproj -NoNewline
     Write-Host '  Injected MSIX properties into csproj' -ForegroundColor DarkGray
 }
 else {
+    # Update thumbprint only
     $csproj = $csproj -replace '<PackageCertificateThumbprint>[^<]*</PackageCertificateThumbprint>',
         ('<PackageCertificateThumbprint>' + $Thumbprint + '</PackageCertificateThumbprint>')
     Set-Content $CsprojPath -Value $csproj -NoNewline
@@ -239,7 +250,11 @@ if ($csproj -notmatch 'Images\\') {
     )
     $imgInsert = [string]::Join("`n", $imgLines)
     $csproj = Get-Content $CsprojPath -Raw
-    $csproj = $csproj.Replace('</Project>', $imgInsert + "`n</Project>")
+    $idx = $csproj.LastIndexOf('</Project>')
+    if ($idx -ge 0) {
+        $before = $csproj.Substring(0, $idx)
+        $csproj = $before + $imgInsert + "`n</Project>`n"
+    }
     Set-Content $CsprojPath -Value $csproj -NoNewline
     Write-Host '  Added Images content include' -ForegroundColor DarkGray
 }
@@ -271,7 +286,7 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# Locate the output MSIX
+# Locate the output MSIX - check configured dir first, then scan entire bin
 $packageDir = Join-Path (Join-Path (Join-Path $ProjectRoot 'bin') $Configuration) 'AppPackages'
 $msixFile   = Get-ChildItem $packageDir -Filter '*.msix' -Recurse -ErrorAction SilentlyContinue |
               Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -281,7 +296,7 @@ if (-not $msixFile) {
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 
-# Fallback: Platform=x64 may output to bin\x64\Release\ instead of bin\Release\
+# Fallback: -p:Platform=x64 may route output to bin\x64\Release\
 if (-not $msixFile) {
     $binDir = Join-Path $ProjectRoot 'bin'
     $msixFile = Get-ChildItem $binDir -Filter '*.msix' -Recurse -ErrorAction SilentlyContinue |
@@ -301,8 +316,7 @@ if ($msixFile) {
     Write-Host ('  Size: ' + $sizeMB + ' MB') -ForegroundColor DarkGray
 }
 else {
-    Write-Warning ('  Could not locate output package in ' + $packageDir)
-    Write-Host ('  Check bin\' + $Configuration + '\ for the package output.') -ForegroundColor DarkGray
+    Write-Warning ('  Could not locate .msix or .appx in bin\\ - check build output above')
 }
 
 # ------------------------------------------------------------------------------
