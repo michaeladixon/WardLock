@@ -44,6 +44,9 @@ $CsprojPath   = Join-Path $ProjectRoot 'WardLock.csproj'
 $ManifestPath = Join-Path $ProjectRoot 'Package.appxmanifest'
 $ImagesDir    = Join-Path $ProjectRoot 'Images'
 
+# UTF-8 without BOM encoder - MakeAppx requires this
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 Write-Host ''
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host '  WardLock MSIX Build Pipeline' -ForegroundColor Cyan
@@ -93,7 +96,7 @@ Write-Host '[1/7] Stamping version into manifest...' -ForegroundColor Yellow
 $mfContent = Get-Content $ManifestPath -Raw
 $mfContent = $mfContent -replace 'Version="[\d\.]+"', ('Version="' + $Version + '"')
 $mfContent = $mfContent -replace 'Publisher="[^"]*"', ('Publisher="' + $CertSubject + '"')
-Set-Content $ManifestPath -Value $mfContent -NoNewline
+[System.IO.File]::WriteAllText($ManifestPath, $mfContent, $Utf8NoBom)
 Write-Host ('  Version: ' + $Version + ' | Publisher: ' + $CertSubject) -ForegroundColor DarkGray
 
 # ------------------------------------------------------------------------------
@@ -266,7 +269,7 @@ if ($csproj -match '<AppxPackageDir>') {
 if ($dirty) {
     # Clean up empty lines left behind
     $csproj = ($csproj -split "`n" | Where-Object { $_.Trim() -ne '' }) -join "`n"
-    Set-Content $CsprojPath -Value $csproj -NoNewline
+    [System.IO.File]::WriteAllText($CsprojPath, $csproj, $Utf8NoBom)
     Write-Host '  Removed unsupported single-project MSIX properties' -ForegroundColor DarkGray
 }
 else {
@@ -312,19 +315,19 @@ $mappingLines = @('[Files]')
 
 $pubFiles = Get-ChildItem $publishDir -Recurse -File
 foreach ($f in $pubFiles) {
-    $relativePath = $f.FullName.Substring($publishDir.Length).TrimStart('\\')
+    $relativePath = $f.FullName.Substring($publishDir.Length).TrimStart('\')
     $line = '"' + $f.FullName + '"  "' + $relativePath + '"'
     $mappingLines += $line
 }
 
-Set-Content $mappingFile -Value ($mappingLines -join "`n")
+[System.IO.File]::WriteAllText($mappingFile, ($mappingLines -join "`n"), $Utf8NoBom)
 
 $msixOutput = Join-Path $ProjectRoot ('WardLock_' + $Version + '.msix')
 
 # Remove old package if it exists
 if (Test-Path $msixOutput) { Remove-Item $msixOutput -Force }
 
-& $makeAppx pack /m (Join-Path $publishDir 'AppxManifest.xml') /f $mappingFile /p $msixOutput /o
+& $makeAppx pack /f $mappingFile /p $msixOutput /o
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error ('MakeAppx failed with exit code ' + $LASTEXITCODE)
