@@ -1,6 +1,8 @@
 <#
 .SYNOPSIS
-    WardLock MSIX Build and Certification Script
+    WardLock MSIX Build and Certification Script.
+    Uses dotnet publish + MakeAppx.exe + SignTool.exe because WPF does not
+    support single-project MSIX packaging natively.
 
 .PARAMETER Configuration
     Build configuration. Default: Release
@@ -15,7 +17,7 @@
     Run Windows App Certification Kit after build.
 
 .PARAMETER CertSubject
-    Certificate subject/publisher identity. Must match Package.appxmanifest Publisher.
+    Certificate CN. Must match Package.appxmanifest Publisher.
     Default: CN=WardLock-Dev
 
 .PARAMETER Version
@@ -24,7 +26,7 @@
 .EXAMPLE
     .\build-msix.ps1
     .\build-msix.ps1 -RunWack
-    .\build-msix.ps1 -Version "1.2.0.0" -RunWack -SkipCert -SkipAssets
+    .\build-msix.ps1 -Version "1.2.0.0" -SkipCert -SkipAssets
 #>
 
 param(
@@ -37,16 +39,46 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ProjectRoot   = $PSScriptRoot
-$CsprojPath    = Join-Path $ProjectRoot 'WardLock.csproj'
-$ManifestPath  = Join-Path $ProjectRoot 'Package.appxmanifest'
-$ImagesDir     = Join-Path $ProjectRoot 'Images'
+$ProjectRoot  = $PSScriptRoot
+$CsprojPath   = Join-Path $ProjectRoot 'WardLock.csproj'
+$ManifestPath = Join-Path $ProjectRoot 'Package.appxmanifest'
+$ImagesDir    = Join-Path $ProjectRoot 'Images'
 
 Write-Host ''
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host '  WardLock MSIX Build Pipeline' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host ''
+
+# ------------------------------------------------------------------------------
+# Helper: find a tool in the Windows SDK
+# ------------------------------------------------------------------------------
+function Find-SdkTool {
+    param([string]$ToolName)
+    $kitsRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+    if (-not (Test-Path $kitsRoot)) { return $null }
+    $found = Get-ChildItem $kitsRoot -Recurse -Filter $ToolName -ErrorAction SilentlyContinue |
+             Where-Object { $_.FullName -match 'x64' } |
+             Sort-Object FullName -Descending |
+             Select-Object -First 1
+    return $found.FullName
+}
+
+# Verify required SDK tools exist
+$makeAppx  = Find-SdkTool 'makeappx.exe'
+$signTool  = Find-SdkTool 'signtool.exe'
+
+if (-not $makeAppx) {
+    Write-Error 'makeappx.exe not found. Install the Windows 10/11 SDK.'
+    exit 1
+}
+if (-not $signTool) {
+    Write-Error 'signtool.exe not found. Install the Windows 10/11 SDK.'
+    exit 1
+}
+
+Write-Host ('  makeappx: ' + $makeAppx) -ForegroundColor DarkGray
+Write-Host ('  signtool: ' + $signTool) -ForegroundColor DarkGray
 
 # ------------------------------------------------------------------------------
 # 1. Stamp version into Package.appxmanifest
@@ -57,11 +89,11 @@ if (-not (Test-Path $ManifestPath)) {
     exit 1
 }
 
-Write-Host '[1/6] Stamping version into manifest...' -ForegroundColor Yellow
-$content = Get-Content $ManifestPath -Raw
-$content = $content -replace 'Version="[\d\.]+"', ('Version="' + $Version + '"')
-$content = $content -replace 'Publisher="[^"]*"', ('Publisher="' + $CertSubject + '"')
-Set-Content $ManifestPath -Value $content -NoNewline
+Write-Host '[1/7] Stamping version into manifest...' -ForegroundColor Yellow
+$mfContent = Get-Content $ManifestPath -Raw
+$mfContent = $mfContent -replace 'Version="[\d\.]+"', ('Version="' + $Version + '"')
+$mfContent = $mfContent -replace 'Publisher="[^"]*"', ('Publisher="' + $CertSubject + '"')
+Set-Content $ManifestPath -Value $mfContent -NoNewline
 Write-Host ('  Version: ' + $Version + ' | Publisher: ' + $CertSubject) -ForegroundColor DarkGray
 
 # ------------------------------------------------------------------------------
@@ -71,7 +103,7 @@ Write-Host ('  Version: ' + $Version + ' | Publisher: ' + $CertSubject) -Foregro
 $Thumbprint = $null
 
 if (-not $SkipCert) {
-    Write-Host '[2/6] Setting up code-signing certificate...' -ForegroundColor Yellow
+    Write-Host '[2/7] Setting up code-signing certificate...' -ForegroundColor Yellow
 
     $existing = Get-ChildItem Cert:\CurrentUser\My | Where-Object {
         $_.Subject -eq $CertSubject -and
@@ -114,7 +146,7 @@ if (-not $SkipCert) {
     }
 }
 else {
-    Write-Host '[2/6] Skipping certificate creation...' -ForegroundColor DarkGray
+    Write-Host '[2/7] Skipping certificate creation...' -ForegroundColor DarkGray
 
     $existing = Get-ChildItem Cert:\CurrentUser\My | Where-Object {
         $_.Subject -eq $CertSubject -and $_.NotAfter -gt (Get-Date)
@@ -132,11 +164,11 @@ else {
 Write-Host ('  Thumbprint: ' + $Thumbprint) -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
-# 3. Generate MSIX visual assets from shield polygon
+# 3. Generate MSIX visual assets
 # ------------------------------------------------------------------------------
 
 if (-not $SkipAssets) {
-    Write-Host '[3/6] Generating MSIX visual assets...' -ForegroundColor Yellow
+    Write-Host '[3/7] Generating MSIX visual assets...' -ForegroundColor Yellow
 
     if (-not (Test-Path $ImagesDir)) { New-Item $ImagesDir -ItemType Directory | Out-Null }
 
@@ -163,7 +195,6 @@ if (-not $SkipAssets) {
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $g.Clear([System.Drawing.Color]::FromArgb(255, 30, 30, 46))
 
-        # Draw centered shield
         $iconSize = [Math]::Min($w, $h) * 0.7
         $s = $iconSize / 64.0
         $ox = ($w - $iconSize) / 2
@@ -195,158 +226,153 @@ if (-not $SkipAssets) {
     }
 }
 else {
-    Write-Host '[3/6] Skipping asset generation...' -ForegroundColor DarkGray
+    Write-Host '[3/7] Skipping asset generation...' -ForegroundColor DarkGray
 }
 
 # ------------------------------------------------------------------------------
-# 4. Patch csproj with MSIX properties (idempotent)
+# 4. Remove single-project MSIX properties from csproj (if present)
+#    WPF does not support single-project MSIX; these cause silent no-output.
 # ------------------------------------------------------------------------------
 
-Write-Host '[4/6] Patching csproj for MSIX build...' -ForegroundColor Yellow
-
+Write-Host '[4/7] Cleaning csproj of unsupported MSIX properties...' -ForegroundColor Yellow
 $csproj = Get-Content $CsprojPath -Raw
+$dirty = $false
 
-if ($csproj -notmatch 'WindowsPackageType') {
-    # Only inject into the FIRST (unconditional) PropertyGroup using regex
-    $msixLines = @(
-        '    <!-- MSIX Packaging - managed by build-msix.ps1 -->'
-        '    <WindowsPackageType>MSIX</WindowsPackageType>'
-        '    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>'
-        ('    <PackageCertificateThumbprint>' + $Thumbprint + '</PackageCertificateThumbprint>')
-        '    <AppxBundle>Never</AppxBundle>'
-        ('    <AppxPackageDir>bin\' + $Configuration + '\AppPackages\</AppxPackageDir>')
-        '    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>'
-    )
-    $msixBlock = [string]::Join("`n", $msixLines)
-
-    # Use regex to replace only the FIRST occurrence of </PropertyGroup>
-    $pattern = '</PropertyGroup>'
-    $idx = $csproj.IndexOf($pattern)
-    if ($idx -ge 0) {
-        $before = $csproj.Substring(0, $idx)
-        $after  = $csproj.Substring($idx + $pattern.Length)
-        $csproj = $before + $msixBlock + "`n  " + $pattern + $after
-    }
-
-    Set-Content $CsprojPath -Value $csproj -NoNewline
-    Write-Host '  Injected MSIX properties into csproj' -ForegroundColor DarkGray
-}
-else {
-    # Update thumbprint only
-    $csproj = $csproj -replace '<PackageCertificateThumbprint>[^<]*</PackageCertificateThumbprint>',
-        ('<PackageCertificateThumbprint>' + $Thumbprint + '</PackageCertificateThumbprint>')
-    Set-Content $CsprojPath -Value $csproj -NoNewline
-    Write-Host '  Updated thumbprint in existing MSIX config' -ForegroundColor DarkGray
-}
-
-# Ensure Images are included as Content
-if ($csproj -notmatch 'Images\\') {
-    $imgLines = @(
-        ''
-        '  <ItemGroup>'
-        '    <!-- MSIX visual assets -->'
-        '    <Content Include="Images\*.png" CopyToOutputDirectory="PreserveNewest" />'
-        '  </ItemGroup>'
-    )
-    $imgInsert = [string]::Join("`n", $imgLines)
-    $csproj = Get-Content $CsprojPath -Raw
-    $idx = $csproj.LastIndexOf('</Project>')
-    if ($idx -ge 0) {
-        $before = $csproj.Substring(0, $idx)
-        $csproj = $before + $imgInsert + "`n</Project>`n"
-    }
-    Set-Content $CsprojPath -Value $csproj -NoNewline
-    Write-Host '  Added Images content include' -ForegroundColor DarkGray
-}
-
-# ------------------------------------------------------------------------------
-# 5. Build MSIX
-# ------------------------------------------------------------------------------
-
-Write-Host '[5/6] Building MSIX package...' -ForegroundColor Yellow
-Write-Host ('  Configuration: ' + $Configuration) -ForegroundColor DarkGray
-
-$buildArgs = @(
-    'publish'
-    $CsprojPath
-    '-c'
-    $Configuration
-    '-r'
-    'win-x64'
-    '--self-contained'
-    'true'
-    '-p:Platform=x64'
-    '-p:RuntimeIdentifierOverride=win-x64'
+$removePatterns = @(
+    '<WindowsPackageType>MSIX</WindowsPackageType>'
+    '<GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>'
+    '<AppxBundle>Never</AppxBundle>'
+    '<AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>'
+    '<!-- MSIX Packaging - managed by build-msix.ps1 -->'
 )
 
-& dotnet @buildArgs
+foreach ($pat in $removePatterns) {
+    if ($csproj.Contains($pat)) {
+        $csproj = $csproj.Replace($pat, '')
+        $dirty = $true
+    }
+}
+
+# Remove PackageCertificateThumbprint and AppxPackageDir lines
+if ($csproj -match '<PackageCertificateThumbprint>') {
+    $csproj = $csproj -replace '\s*<PackageCertificateThumbprint>[^<]*</PackageCertificateThumbprint>', ''
+    $dirty = $true
+}
+if ($csproj -match '<AppxPackageDir>') {
+    $csproj = $csproj -replace '\s*<AppxPackageDir>[^<]*</AppxPackageDir>', ''
+    $dirty = $true
+}
+
+if ($dirty) {
+    # Clean up empty lines left behind
+    $csproj = ($csproj -split "`n" | Where-Object { $_.Trim() -ne '' }) -join "`n"
+    Set-Content $CsprojPath -Value $csproj -NoNewline
+    Write-Host '  Removed unsupported single-project MSIX properties' -ForegroundColor DarkGray
+}
+else {
+    Write-Host '  csproj is clean' -ForegroundColor DarkGray
+}
+
+# ------------------------------------------------------------------------------
+# 5. dotnet publish (produces the layout folder)
+# ------------------------------------------------------------------------------
+
+Write-Host '[5/7] Publishing WardLock...' -ForegroundColor Yellow
+
+$publishDir = Join-Path $ProjectRoot 'bin' | Join-Path -ChildPath 'msix-publish'
+
+& dotnet publish $CsprojPath `
+    -c $Configuration `
+    -r win-x64 `
+    --self-contained true `
+    -o $publishDir
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Error ('Build failed with exit code ' + $LASTEXITCODE)
+    Write-Error ('dotnet publish failed with exit code ' + $LASTEXITCODE)
     exit $LASTEXITCODE
 }
 
-# Locate the output MSIX - check configured dir first, then scan entire bin
-$packageDir = Join-Path (Join-Path (Join-Path $ProjectRoot 'bin') $Configuration) 'AppPackages'
-$msixFile   = Get-ChildItem $packageDir -Filter '*.msix' -Recurse -ErrorAction SilentlyContinue |
-              Sort-Object LastWriteTime -Descending | Select-Object -First 1
-
-if (-not $msixFile) {
-    $msixFile = Get-ChildItem $packageDir -Filter '*.appx' -Recurse -ErrorAction SilentlyContinue |
-                Sort-Object LastWriteTime -Descending | Select-Object -First 1
-}
-
-# Fallback: -p:Platform=x64 may route output to bin\x64\Release\
-if (-not $msixFile) {
-    $binDir = Join-Path $ProjectRoot 'bin'
-    $msixFile = Get-ChildItem $binDir -Filter '*.msix' -Recurse -ErrorAction SilentlyContinue |
-                Sort-Object LastWriteTime -Descending | Select-Object -First 1
-}
-
-if (-not $msixFile) {
-    $binDir = Join-Path $ProjectRoot 'bin'
-    $msixFile = Get-ChildItem $binDir -Filter '*.appx' -Recurse -ErrorAction SilentlyContinue |
-                Sort-Object LastWriteTime -Descending | Select-Object -First 1
-}
-
-if ($msixFile) {
-    $sizeMB = [math]::Round($msixFile.Length / 1MB, 2)
-    Write-Host ''
-    Write-Host ('  MSIX output: ' + $msixFile.FullName) -ForegroundColor Green
-    Write-Host ('  Size: ' + $sizeMB + ' MB') -ForegroundColor DarkGray
-}
-else {
-    Write-Warning ('  Could not locate .msix or .appx in bin\\ - check build output above')
-}
+Write-Host ('  Published to: ' + $publishDir) -ForegroundColor DarkGray
 
 # ------------------------------------------------------------------------------
-# 6. Run WACK (optional)
+# 6. Assemble MSIX with MakeAppx.exe
+# ------------------------------------------------------------------------------
+
+Write-Host '[6/7] Assembling MSIX package...' -ForegroundColor Yellow
+
+# Copy manifest and assets into the publish layout
+Copy-Item $ManifestPath (Join-Path $publishDir 'AppxManifest.xml') -Force
+$destImages = Join-Path $publishDir 'Images'
+if (-not (Test-Path $destImages)) { New-Item $destImages -ItemType Directory | Out-Null }
+Copy-Item (Join-Path $ImagesDir '*') $destImages -Force
+
+# Create a mapping file for MakeAppx
+$mappingFile = Join-Path $ProjectRoot 'AppxMapping.ini'
+$mappingLines = @('[Files]')
+
+$pubFiles = Get-ChildItem $publishDir -Recurse -File
+foreach ($f in $pubFiles) {
+    $relativePath = $f.FullName.Substring($publishDir.Length).TrimStart('\\')
+    $line = '"' + $f.FullName + '"  "' + $relativePath + '"'
+    $mappingLines += $line
+}
+
+Set-Content $mappingFile -Value ($mappingLines -join "`n")
+
+$msixOutput = Join-Path $ProjectRoot ('WardLock_' + $Version + '.msix')
+
+# Remove old package if it exists
+if (Test-Path $msixOutput) { Remove-Item $msixOutput -Force }
+
+& $makeAppx pack /m (Join-Path $publishDir 'AppxManifest.xml') /f $mappingFile /p $msixOutput /o
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error ('MakeAppx failed with exit code ' + $LASTEXITCODE)
+    exit $LASTEXITCODE
+}
+
+# Clean up mapping file
+Remove-Item $mappingFile -ErrorAction SilentlyContinue
+
+# Sign the package
+Write-Host '  Signing MSIX...' -ForegroundColor DarkGray
+& $signTool sign /fd SHA256 /sha1 $Thumbprint /td SHA256 $msixOutput
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning '  SignTool failed. The MSIX was created but is unsigned.'
+    Write-Host '  You may need to run as admin or check certificate is in CurrentUser\My' -ForegroundColor DarkGray
+}
+else {
+    Write-Host '  Package signed successfully' -ForegroundColor DarkGray
+}
+
+$sizeMB = [math]::Round((Get-Item $msixOutput).Length / 1MB, 2)
+Write-Host ''
+Write-Host ('  MSIX: ' + $msixOutput) -ForegroundColor Green
+Write-Host ('  Size: ' + $sizeMB + ' MB') -ForegroundColor DarkGray
+
+# ------------------------------------------------------------------------------
+# 7. Run WACK (optional)
 # ------------------------------------------------------------------------------
 
 if ($RunWack) {
-    Write-Host '[6/6] Running Windows App Certification Kit...' -ForegroundColor Yellow
+    Write-Host '[7/7] Running Windows App Certification Kit...' -ForegroundColor Yellow
 
-    $wackPath = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\App Certification Kit\appcert.exe'
-
-    if (-not (Test-Path $wackPath)) {
-        $wackSearch = Get-ChildItem (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits') -Recurse -Filter 'appcert.exe' -ErrorAction SilentlyContinue |
-                      Select-Object -First 1
-        if ($wackSearch) {
-            $wackPath = $wackSearch.FullName
-        }
-        else {
-            Write-Warning '  WACK not found. Install the Windows SDK.'
-            Write-Host '  You can run WACK manually later with appcert.exe' -ForegroundColor DarkGray
-            $RunWack = $false
-        }
+    $wackPath = Find-SdkTool 'appcert.exe'
+    if (-not $wackPath) {
+        # Try the known path
+        $wackPath = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\App Certification Kit\appcert.exe'
     }
 
-    if ($RunWack -and $msixFile) {
+    if (-not (Test-Path $wackPath)) {
+        Write-Warning '  WACK not found. Install the Windows SDK.'
+        Write-Host '  Run WACK manually: appcert.exe test -apptype desktop ...' -ForegroundColor DarkGray
+    }
+    else {
         $reportPath = Join-Path $ProjectRoot 'wack-report.xml'
-        Write-Host ('  Validating: ' + $msixFile.Name) -ForegroundColor DarkGray
-        Write-Host ('  Report: ' + $reportPath) -ForegroundColor DarkGray
+        Write-Host ('  Validating: ' + $msixOutput) -ForegroundColor DarkGray
 
-        & $wackPath test -apptype desktop -setuppath $msixFile.FullName -reportoutputpath $reportPath
+        & $wackPath test -apptype desktop -setuppath $msixOutput -reportoutputpath $reportPath
 
         if (Test-Path $reportPath) {
             $reportXml = [xml](Get-Content $reportPath)
@@ -368,12 +394,9 @@ if ($RunWack) {
             }
         }
     }
-    elseif ($RunWack) {
-        Write-Warning '  No MSIX package found to validate.'
-    }
 }
 else {
-    Write-Host '[6/6] Skipping WACK. Use -RunWack to enable.' -ForegroundColor DarkGray
+    Write-Host '[7/7] Skipping WACK. Use -RunWack to enable.' -ForegroundColor DarkGray
 }
 
 # ------------------------------------------------------------------------------
@@ -388,12 +411,10 @@ Write-Host ('  Certificate:  ' + $Thumbprint)
 Write-Host ('  Publisher:    ' + $CertSubject)
 Write-Host ('  Version:      ' + $Version)
 Write-Host ('  Config:       ' + $Configuration)
-if ($msixFile) {
-    Write-Host ('  Package:      ' + $msixFile.FullName) -ForegroundColor Green
-}
+Write-Host ('  Package:      ' + $msixOutput) -ForegroundColor Green
 Write-Host ''
 Write-Host '  Next steps:' -ForegroundColor Yellow
-Write-Host '    Sideload:     Add-AppxPackage -Path your-package.msix' -ForegroundColor DarkGray
+Write-Host '    Sideload:     Add-AppxPackage -Path .\WardLock_1.0.0.0.msix' -ForegroundColor DarkGray
 Write-Host '    Store submit: Upload MSIX to Partner Center' -ForegroundColor DarkGray
 Write-Host '    Run WACK:     .\build-msix.ps1 -RunWack -SkipCert -SkipAssets' -ForegroundColor DarkGray
 Write-Host ''

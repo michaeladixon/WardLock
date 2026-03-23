@@ -20,13 +20,6 @@
     <SignAssembly>True</SignAssembly>
     <AssemblyOriginatorKeyFile>WardLock.snk</AssemblyOriginatorKeyFile>
     <DefaultLanguage>en</DefaultLanguage>
-    <!-- MSIX Packaging - managed by build-msix.ps1 -->
-    <WindowsPackageType>MSIX</WindowsPackageType>
-    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
-    <PackageCertificateThumbprint>95C991CC44404523742D5F1680BBEC7812917CF9</PackageCertificateThumbprint>
-    <AppxBundle>Never</AppxBundle>
-    <AppxPackageDir>bin\Release\AppPackages\</AppxPackageDir>
-    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
