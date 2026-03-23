@@ -445,3 +445,9 @@ Write-Host '    Sideload:     Add-AppxPackage -Path .\WardLock_1.0.0.0.msix' -Fo
 Write-Host '    Store submit: Upload MSIX to Partner Center' -ForegroundColor DarkGray
 Write-Host '    Run WACK:     .\build-msix.ps1 -RunWack -SkipCert -SkipAssets' -ForegroundColor DarkGray
 Write-Host ''
+
+# Find your cert and trust it
+$cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq 'CN=WardLock-Dev' } | Select-Object -First 1
+Export-Certificate -Cert $cert -FilePath "$env:TEMP\wardlock-dev.cer" | Out-Null
+Import-Certificate -FilePath "$env:TEMP\wardlock-dev.cer" -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople'
+Remove-Item "$env:TEMP\wardlock-dev.cer"
