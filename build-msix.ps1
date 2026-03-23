@@ -84,7 +84,7 @@ Write-Host ('  makeappx: ' + $makeAppx) -ForegroundColor DarkGray
 Write-Host ('  signtool: ' + $signTool) -ForegroundColor DarkGray
 
 # ------------------------------------------------------------------------------
-# 1. Stamp version into Package.appxmanifest
+# 1. Stamp version and publisher into Package.appxmanifest (XML-safe)
 # ------------------------------------------------------------------------------
 
 if (-not (Test-Path $ManifestPath)) {
@@ -93,10 +93,34 @@ if (-not (Test-Path $ManifestPath)) {
 }
 
 Write-Host '[1/7] Stamping version into manifest...' -ForegroundColor Yellow
-$mfContent = Get-Content $ManifestPath -Raw
-$mfContent = $mfContent -replace 'Version="[\d\.]+"', ('Version="' + $Version + '"')
-$mfContent = $mfContent -replace 'Publisher="[^"]*"', ('Publisher="' + $CertSubject + '"')
-[System.IO.File]::WriteAllText($ManifestPath, $mfContent, $Utf8NoBom)
+
+# Use proper XML parsing to avoid corrupting the XML declaration or other attributes
+$mfXml = New-Object System.Xml.XmlDocument
+$mfXml.PreserveWhitespace = $true
+$mfXml.Load($ManifestPath)
+
+$nsMgr = New-Object System.Xml.XmlNamespaceManager($mfXml.NameTable)
+$nsMgr.AddNamespace('m', 'http://schemas.microsoft.com/appx/manifest/foundation/windows10')
+
+$identity = $mfXml.SelectSingleNode('//m:Identity', $nsMgr)
+if ($identity) {
+    $identity.SetAttribute('Version', $Version)
+    $identity.SetAttribute('Publisher', $CertSubject)
+}
+
+# Save as UTF-8 without BOM
+$writerSettings = New-Object System.Xml.XmlWriterSettings
+$writerSettings.Encoding = $Utf8NoBom
+$writerSettings.Indent = $true
+$writerSettings.IndentChars = '  '
+$writerSettings.OmitXmlDeclaration = $false
+
+$stream = New-Object System.IO.StreamWriter($ManifestPath, $false, $Utf8NoBom)
+$writer = [System.Xml.XmlWriter]::Create($stream, $writerSettings)
+$mfXml.Save($writer)
+$writer.Close()
+$stream.Close()
+
 Write-Host ('  Version: ' + $Version + ' | Publisher: ' + $CertSubject) -ForegroundColor DarkGray
 
 # ------------------------------------------------------------------------------
