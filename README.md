@@ -95,13 +95,32 @@ dotnet build -c Release -r win-x64
 dotnet run
 ```
 
-### Build the MSIX installer
-1. Run the signing setup once (requires elevated prompt):
-   ```
-   powershell -ExecutionPolicy Bypass -File setup-signing.ps1
-   ```
-2. In Visual Studio: right-click `WardLock_Installer` → Publish → Create App Packages
-3. Install the `.msixbundle` from the output folder
+### Build the MSIX installer (sideload)
+```powershell
+.\build-msix.ps1
+```
+This handles everything: creates a self-signed cert, generates visual assets, publishes the app, assembles the MSIX with `MakeAppx.exe`, and signs it with `SignTool.exe`. On first run it installs the cert to `TrustedPeople` (requires an elevated prompt, or run without elevation and sideload manually).
+
+Install the output:
+```powershell
+Add-AppxPackage -Path .\WardLock_1.0.0.0.msix
+```
+
+Common flags:
+| Flag | Purpose |
+|---|---|
+| `-Version "1.2.0.0"` | Set the package version |
+| `-SkipCert` | Reuse an existing cert instead of creating one |
+| `-SkipAssets` | Skip icon generation if `Images\` is already populated |
+| `-RunWack` | Run the Windows App Certification Kit after build |
+
+**Requirements:** Windows 10/11 SDK (for `MakeAppx.exe` and `SignTool.exe`)
+
+### Build for Microsoft Store submission
+```powershell
+.\build-msix.ps1 -Store -Version "1.0.0.0"
+```
+Stamps the Partner Center identity into the manifest and skips local signing (the Store re-signs on upload). Upload the resulting `.msix` to Partner Center → Your App → Packages.
 
 ## Project Structure
 
