@@ -274,8 +274,7 @@ public class SharedVaultService : IDisposable
 
     private static byte[] DeriveKey(string password, byte[] salt)
     {
-        using var pbkdf2 = new Rfc2898DeriveBytes(password, salt, Iterations, HashAlgorithmName.SHA256);
-        return pbkdf2.GetBytes(KeySize);
+        return Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, KeySize);
     }
 
     public void Dispose()
