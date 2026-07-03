@@ -207,7 +207,10 @@ public partial class MainViewModel : ObservableObject
 
             var storedSub = AppSettings.OAuthSub;
             if (string.IsNullOrEmpty(storedSub) || identity.Sub == storedSub)
+            {
                 Unlock();
+                RestoreWindow?.Invoke();
+            }
             else
                 StatusMessage = "Signed in as a different account. Use the account you set up WardLock with.";
         }

@@ -23,7 +23,7 @@ namespace WardLock.Services;
 public static class OAuthService
 {
     // ── Configure these before shipping ──────────────────────────────────────
-    public const string GoogleClientId    = "";   // Google Cloud Console → Credentials → OAuth 2.0 Client ID (Desktop app)
+    public const string GoogleClientId    = "624129965398-i34ljknmfhf8rv6qprqkt1mefc6gqml3.apps.googleusercontent.com";   // Google Cloud Console → Credentials → OAuth 2.0 Client ID (Desktop app)
     public const string MicrosoftClientId = "";   // Azure portal → App registrations → Application (client) ID
     public const string FacebookClientId  = "";   // developers.facebook.com → App ID
     // ─────────────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ public static class OAuthService
             throw new InvalidOperationException($"{provider} client ID is not configured.");
 
         var port        = GetFreePort();
-        var redirectUri = $"http://localhost:{port}/";
+        var redirectUri = $"http://127.0.0.1:{port}/";
 
         // PKCE
         var verifier   = GenerateCodeVerifier();
