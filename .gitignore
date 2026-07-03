@@ -361,3 +361,4 @@ FodyWeavers.xsd
 # Signing keys — NEVER commit these
 *.snk
 *.pfx
+/WardLock_1.0.0.0.msix
