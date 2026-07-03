@@ -761,11 +761,6 @@
                     <TextBlock Text="Secret (Base32):" FontSize="11" Foreground="#a6adc8"/>
                     <TextBox Text="{Binding ManualSecret, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource InputBox}" Margin="0,2,0,6"/>
-                    <CheckBox IsChecked="{Binding ManualIsSteam}" Margin="0,0,0,8"
-                              ToolTip="Steam Guard codes are 5 characters. Paste the shared secret in Base32 or Base64 (e.g. shared_secret from an SDA maFile).">
-                        <TextBlock Text="Steam Guard (5-character code, Base32 or Base64 secret)"
-                                   FontSize="11" Foreground="#a6adc8"/>
-                    </CheckBox>
                     <Button Content="Add Manual" Style="{StaticResource AccentButton}"
                             Command="{Binding AddManualCommand}"
                             HorizontalAlignment="Left"/>

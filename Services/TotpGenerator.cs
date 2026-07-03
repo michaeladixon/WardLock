@@ -78,34 +78,4 @@ public static class TotpGenerator
         }
         return new string(code);
     }
-
-    /// <summary>
-    /// Steam secrets come in two forms: Base32 (otpauth URIs, KeePassXC/Aegis exports)
-    /// and Base64 (SDA maFile shared_secret). Normalizes either to Base32 for storage.
-    /// Detection is case-sensitive: a random Base64 secret is all-uppercase [A-Z2-7]
-    /// with negligible probability, so uppercase-only input is treated as Base32.
-    /// </summary>
-    public static string NormalizeSteamSecret(string raw)
-    {
-        var candidate = raw.Trim().Replace(" ", "");
-        if (candidate.Length == 0)
-            throw new ArgumentException("Secret is required.");
-
-        if (System.Text.RegularExpressions.Regex.IsMatch(candidate, "^[A-Z2-7]+=*$"))
-            return candidate.TrimEnd('=');
-
-        try
-        {
-            var bytes = Convert.FromBase64String(candidate);
-            return Base32Encoding.ToString(bytes).TrimEnd('=');
-        }
-        catch (FormatException)
-        {
-            // Not Base64 either; accept lowercase Base32 as a last resort
-            var upper = candidate.ToUpperInvariant();
-            if (System.Text.RegularExpressions.Regex.IsMatch(upper, "^[A-Z2-7]+=*$"))
-                return upper.TrimEnd('=');
-            throw new ArgumentException("Steam secret must be Base32 or Base64.");
-        }
-    }
 }

@@ -67,9 +67,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _manualSecret = string.Empty;
 
-    [ObservableProperty]
-    private bool _manualIsSteam;
-
     /// <summary>Target for adding accounts: null=personal, vault name=shared vault.</summary>
     [ObservableProperty]
     private string? _addTarget;
@@ -350,24 +347,14 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(ManualSecret))
+            var secret = ManualSecret.Trim().Replace(" ", "").ToUpperInvariant();
+            if (string.IsNullOrEmpty(secret))
             {
                 StatusMessage = "Secret is required.";
                 return;
             }
 
-            // Steam secrets may be Base64 (SDA maFile) and are case-sensitive,
-            // so normalize instead of the generic uppercase cleanup.
-            var secret = ManualIsSteam
-                ? TotpGenerator.NormalizeSteamSecret(ManualSecret)
-                : ManualSecret.Trim().Replace(" ", "").ToUpperInvariant();
-
-            var encoder = ManualIsSteam ? OtpEncoder.Steam : OtpEncoder.Default;
-            var issuer = ManualIssuer.Trim();
-            if (ManualIsSteam && string.IsNullOrEmpty(issuer))
-                issuer = "Steam";
-
-            if (IsDuplicate(issuer, ManualLabel.Trim()))
+            if (IsDuplicate(ManualIssuer.Trim(), ManualLabel.Trim()))
             {
                 StatusMessage = "An account with this issuer and label already exists.";
                 return;
@@ -376,20 +363,18 @@ public partial class MainViewModel : ObservableObject
             var targetVault = GetSelectedVault();
             if (targetVault != null)
             {
-                targetVault.AddAccount(issuer, ManualLabel.Trim(), secret, encoder: encoder);
+                targetVault.AddAccount(ManualIssuer.Trim(), ManualLabel.Trim(), secret);
                 var account = targetVault.Accounts.Last();
                 Accounts.Add(new AccountViewModel(account));
-                StatusMessage = $"Added {issuer} to vault '{targetVault.VaultName}'";
+                StatusMessage = $"Added {ManualIssuer.Trim()} to vault '{targetVault.VaultName}'";
             }
             else
             {
                 var account = new AuthAccount
                 {
-                    Issuer = issuer,
+                    Issuer = ManualIssuer.Trim(),
                     Label = ManualLabel.Trim(),
-                    EncryptedSecret = SecretVault.Encrypt(secret),
-                    Encoder = encoder,
-                    Digits = encoder == OtpEncoder.Steam ? 5 : 6
+                    EncryptedSecret = SecretVault.Encrypt(secret)
                 };
                 _store.Add(account);
                 Accounts.Add(new AccountViewModel(account));
@@ -399,7 +384,6 @@ public partial class MainViewModel : ObservableObject
             ManualIssuer = string.Empty;
             ManualLabel = string.Empty;
             ManualSecret = string.Empty;
-            ManualIsSteam = false;
             IsAddPanelVisible = false;
         }
         catch (Exception ex)
@@ -760,7 +744,7 @@ public partial class MainViewModel : ObservableObject
 
         var plaintext = SecretVault.Decrypt(personal.EncryptedSecret);
         vault.AddAccount(personal.Issuer, personal.Label, plaintext,
-            personal.Digits, personal.Period, personal.Algorithm);
+            personal.Digits, personal.Period, personal.Algorithm, personal.Encoder);
 
         _store.Remove(personal.Id);
 
