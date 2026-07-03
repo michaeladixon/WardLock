@@ -14,6 +14,8 @@ dotnet run
 ### TOTP Code Generation
 Supports 6/8-digit codes, SHA1/SHA256/SHA512 algorithms, and configurable time periods. Codes refresh live with a countdown timer. Click any entry to copy the code to clipboard.
 
+Steam Guard entries migrated from other authenticators are supported: URIs using `otpauth://steam/...` (Aegis exports) or `encoder=steam` (KeePassXC exports) import directly and render Steam's 5-character codes. Note that Steam offers no official way to obtain your shared secret — WardLock can only import one you already have from another app's export.
+
 ### QR Code Scanning
 Three scan modes available from the menu:
 - **Screen scan** — captures your full desktop and finds the QR code automatically. If it can't find one, falls back to a region selector overlay where you draw a box around the QR code.

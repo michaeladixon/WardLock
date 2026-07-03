@@ -90,10 +90,12 @@ public class AccountStore
     /// <summary>
     /// Parse an otpauth:// URI (from QR code or manual paste).
     /// Format: otpauth://totp/Issuer:label?secret=BASE32&issuer=Issuer&algorithm=SHA1&digits=6&period=30
+    /// Steam Guard variants: otpauth://steam/... (Aegis) or encoder=steam query param (KeePassXC).
     /// </summary>
     public static AuthAccount ParseOtpAuthUri(string uri)
     {
-        if (!uri.StartsWith("otpauth://totp/", StringComparison.OrdinalIgnoreCase))
+        var isSteamScheme = uri.StartsWith("otpauth://steam/", StringComparison.OrdinalIgnoreCase);
+        if (!uri.StartsWith("otpauth://totp/", StringComparison.OrdinalIgnoreCase) && !isSteamScheme)
             throw new ArgumentException("Only TOTP URIs are supported.");
 
         var uriObj = new Uri(uri);
@@ -112,6 +114,12 @@ public class AccountStore
             label = parts[1];
         }
 
+        var encoder = isSteamScheme || string.Equals(query["encoder"], "steam", StringComparison.OrdinalIgnoreCase)
+            ? OtpEncoder.Steam
+            : OtpEncoder.Default;
+        if (encoder == OtpEncoder.Steam && string.IsNullOrEmpty(issuer))
+            issuer = "Steam";
+
         var digits = int.TryParse(query["digits"], out var d) ? d : 6;
         var period = int.TryParse(query["period"], out var p) ? p : 30;
         var algo = (query["algorithm"]?.ToUpperInvariant()) switch
@@ -126,9 +134,10 @@ public class AccountStore
             Issuer = issuer,
             Label = label,
             EncryptedSecret = SecretVault.Encrypt(secret),
-            Digits = digits,
+            Digits = encoder == OtpEncoder.Steam ? 5 : digits,
             Period = period,
-            Algorithm = algo
+            Algorithm = algo,
+            Encoder = encoder
         };
     }
 }

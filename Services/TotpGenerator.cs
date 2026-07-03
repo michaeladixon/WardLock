@@ -6,6 +6,11 @@ namespace WardLock.Services;
 
 public static class TotpGenerator
 {
+    /// <summary>
+    /// Steam Guard's custom code alphabet (no 0/1/A/E/I/L/O/S/U/Z to avoid ambiguity).
+    /// </summary>
+    private const string SteamAlphabet = "23456789BCDFGHJKMNPQRTVWXY";
+
     public static string GenerateCode(AuthAccount account)
     {
         // Shared vault accounts hold plaintext secret in memory;
@@ -22,6 +27,9 @@ public static class TotpGenerator
             return string.Empty;
         }
         var secretBytes = Base32Encoding.ToBytes(secret);
+
+        if (account.Encoder == OtpEncoder.Steam)
+            return ComputeSteamCode(secretBytes, account.Period);
 
         var mode = account.Algorithm switch
         {
@@ -41,5 +49,33 @@ public static class TotpGenerator
     {
         var epoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         return period - (int)(epoch % period);
+    }
+
+    /// <summary>
+    /// Steam Guard code: standard RFC 6238 HMAC-SHA1 truncation, but the 31-bit value
+    /// is encoded as 5 characters over Steam's custom alphabet instead of decimal digits.
+    /// </summary>
+    private static string ComputeSteamCode(byte[] secretBytes, int period)
+    {
+        var counter = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() / period);
+        var counterBytes = new byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(counterBytes, counter);
+
+        using var hmac = new HMACSHA1(secretBytes);
+        var hash = hmac.ComputeHash(counterBytes);
+
+        var offset = hash[^1] & 0x0f;
+        var fullCode = ((hash[offset] & 0x7f) << 24)
+                     | (hash[offset + 1] << 16)
+                     | (hash[offset + 2] << 8)
+                     | hash[offset + 3];
+
+        Span<char> code = stackalloc char[5];
+        for (int i = 0; i < code.Length; i++)
+        {
+            code[i] = SteamAlphabet[fullCode % SteamAlphabet.Length];
+            fullCode /= SteamAlphabet.Length;
+        }
+        return new string(code);
     }
 }

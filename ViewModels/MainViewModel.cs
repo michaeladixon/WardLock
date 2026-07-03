@@ -744,7 +744,7 @@ public partial class MainViewModel : ObservableObject
 
         var plaintext = SecretVault.Decrypt(personal.EncryptedSecret);
         vault.AddAccount(personal.Issuer, personal.Label, plaintext,
-            personal.Digits, personal.Period, personal.Algorithm);
+            personal.Digits, personal.Period, personal.Algorithm, personal.Encoder);
 
         _store.Remove(personal.Id);
 

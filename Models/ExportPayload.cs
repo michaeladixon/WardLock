@@ -29,5 +29,7 @@ public class ExportAccount
     public int Digits { get; set; } = 6;
     public int Period { get; set; } = 30;
     public string Algorithm { get; set; } = "SHA1";
+    /// <summary>"Default" or "Steam". Older exports omit this and default to "Default".</summary>
+    public string Encoder { get; set; } = "Default";
     public int SortOrder { get; set; }
 }
