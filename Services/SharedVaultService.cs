@@ -106,6 +106,7 @@ public class SharedVaultService : IDisposable
             Digits = e.Digits,
             Period = e.Period,
             Algorithm = Enum.TryParse<OtpHashAlgorithm>(e.Algorithm, true, out var a) ? a : OtpHashAlgorithm.Sha1,
+            Encoder = Enum.TryParse<OtpEncoder>(e.Encoder, true, out var enc) ? enc : OtpEncoder.Default,
             SortOrder = e.SortOrder,
             CreatedAt = DateTime.UtcNow
         }).ToList();
@@ -116,7 +117,8 @@ public class SharedVaultService : IDisposable
     /// Accepts a plaintext Base32 secret (NOT a DPAPI-encrypted one).
     /// </summary>
     public void AddAccount(string issuer, string label, string plaintextSecret,
-        int digits = 6, int period = 30, OtpHashAlgorithm algorithm = OtpHashAlgorithm.Sha1)
+        int digits = 6, int period = 30, OtpHashAlgorithm algorithm = OtpHashAlgorithm.Sha1,
+        OtpEncoder encoder = OtpEncoder.Default)
     {
         var account = new AuthAccount
         {
@@ -124,9 +126,10 @@ public class SharedVaultService : IDisposable
             Label = label,
             PlaintextSecret = plaintextSecret,
             VaultName = VaultName,
-            Digits = digits,
+            Digits = encoder == OtpEncoder.Steam ? 5 : digits,
             Period = period,
             Algorithm = algorithm,
+            Encoder = encoder,
             SortOrder = Accounts.Count > 0 ? Accounts.Max(a => a.SortOrder) + 1 : 0
         };
 
@@ -140,7 +143,8 @@ public class SharedVaultService : IDisposable
     public AuthAccount AddAccountFromUri(string otpAuthUri)
     {
         // Parse the URI to extract the secret in plaintext
-        if (!otpAuthUri.StartsWith("otpauth://totp/", StringComparison.OrdinalIgnoreCase))
+        var isSteamScheme = otpAuthUri.StartsWith("otpauth://steam/", StringComparison.OrdinalIgnoreCase);
+        if (!otpAuthUri.StartsWith("otpauth://totp/", StringComparison.OrdinalIgnoreCase) && !isSteamScheme)
             throw new ArgumentException("Only TOTP URIs are supported.");
 
         var uriObj = new Uri(otpAuthUri);
@@ -158,6 +162,12 @@ public class SharedVaultService : IDisposable
             label = parts[1];
         }
 
+        var encoder = isSteamScheme || string.Equals(query["encoder"], "steam", StringComparison.OrdinalIgnoreCase)
+            ? OtpEncoder.Steam
+            : OtpEncoder.Default;
+        if (encoder == OtpEncoder.Steam && string.IsNullOrEmpty(issuer))
+            issuer = "Steam";
+
         var digits = int.TryParse(query["digits"], out var d) ? d : 6;
         var period = int.TryParse(query["period"], out var p) ? p : 30;
         var algo = (query["algorithm"]?.ToUpperInvariant()) switch
@@ -173,9 +183,10 @@ public class SharedVaultService : IDisposable
             Label = label,
             PlaintextSecret = secret,
             VaultName = VaultName,
-            Digits = digits,
+            Digits = encoder == OtpEncoder.Steam ? 5 : digits,
             Period = period,
             Algorithm = algo,
+            Encoder = encoder,
             SortOrder = Accounts.Count > 0 ? Accounts.Max(a => a.SortOrder) + 1 : 0
         };
 
@@ -204,6 +215,7 @@ public class SharedVaultService : IDisposable
             Digits = a.Digits,
             Period = a.Period,
             Algorithm = a.Algorithm.ToString(),
+            Encoder = a.Encoder.ToString(),
             SortOrder = a.SortOrder > 0 ? a.SortOrder : i
         }).ToList();
 

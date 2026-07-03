@@ -11,6 +11,7 @@ public class AuthAccount
     public int Digits { get; set; } = 6;
     public int Period { get; set; } = 30;
     public OtpHashAlgorithm Algorithm { get; set; } = OtpHashAlgorithm.Sha1;
+    public OtpEncoder Encoder { get; set; } = OtpEncoder.Default;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int SortOrder { get; set; }
 
@@ -35,4 +36,14 @@ public enum OtpHashAlgorithm
     Sha1,
     Sha256,
     Sha512
+}
+
+/// <summary>
+/// Output encoding of the truncated TOTP value.
+/// Steam uses a 5-character code over a custom alphabet instead of decimal digits.
+/// </summary>
+public enum OtpEncoder
+{
+    Default,
+    Steam
 }
