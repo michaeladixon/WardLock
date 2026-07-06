@@ -32,4 +32,6 @@ public class ExportAccount
     /// <summary>"Default" or "Steam". Older exports omit this and default to "Default".</summary>
     public string Encoder { get; set; } = "Default";
     public int SortOrder { get; set; }
+    /// <summary>Registrable domain for browser fill. Older exports omit this.</summary>
+    public string? Domain { get; set; }
 }

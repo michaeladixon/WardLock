@@ -513,6 +513,39 @@
                         </ItemsControl>
 
                         <Separator Background="#45475a" Margin="4,8"/>
+                        <TextBlock Text="BROWSER" FontSize="9" FontWeight="Bold"
+                                   Foreground="#585b70" Margin="8,0,8,4"/>
+                        <Button Style="{StaticResource MenuButton}" Command="{Binding EnableBrowserIntegrationCommand}">
+                            <DockPanel>
+                                <TextBlock Width="20" TextAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="&#127760;"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding BrowserIntegrationInstalled}" Value="True">
+                                                    <Setter Property="Text" Value="&#10003;"/>
+                                                    <Setter Property="Foreground" Value="#a6e3a1"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Margin="8,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="Enable Browser Integration"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding BrowserIntegrationInstalled}" Value="True">
+                                                    <Setter Property="Text" Value="Browser Integration Enabled"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DockPanel>
+                        </Button>
+
+                        <Separator Background="#45475a" Margin="4,8"/>
                         <TextBlock Text="Ctrl+Shift+A &#8212; show / hide | Ctrl+Shift+T &#8212; type code | Ctrl+F &#8212; search" FontSize="10"
                                    Foreground="#585b70" Margin="8,0,8,6" FontStyle="Italic"
                                    HorizontalAlignment="Center"/>
@@ -565,6 +598,11 @@
                                     <MenuItem Header="Copy Code" Click="OnContextCopyCode">
                                         <MenuItem.Icon>
                                             <TextBlock Text="&#128203;" FontSize="12"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Set Fill Domain…" Click="OnContextSetDomain">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="&#127760;" FontSize="12"/>
                                         </MenuItem.Icon>
                                     </MenuItem>
                                     <Separator Background="#45475a"/>
@@ -625,6 +663,9 @@
                                         <TextBlock Text="{Binding Issuer}" FontSize="11" Foreground="#a6adc8"/>
                                         <TextBlock Text="{Binding SourceLabel}" FontSize="9"
                                                    Foreground="#585b70" Margin="6,0,0,0"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DomainBadge}" FontSize="9"
+                                                   Foreground="#74c7ec" Margin="6,0,0,0"
                                                    VerticalAlignment="Center"/>
                                     </DockPanel>
                                     <!-- TOTP code: color varies by source (green=personal, mauve=vault) -->
@@ -760,6 +801,9 @@
                              Style="{StaticResource InputBox}" Margin="0,2,0,6"/>
                     <TextBlock Text="Secret (Base32):" FontSize="11" Foreground="#a6adc8"/>
                     <TextBox Text="{Binding ManualSecret, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource InputBox}" Margin="0,2,0,6"/>
+                    <TextBlock Text="Fill domain (optional, e.g. github.com — enables browser fill):" FontSize="11" Foreground="#a6adc8"/>
+                    <TextBox Text="{Binding ManualDomain, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource InputBox}" Margin="0,2,0,6"/>
                     <Button Content="Add Manual" Style="{StaticResource AccentButton}"
                             Command="{Binding AddManualCommand}"

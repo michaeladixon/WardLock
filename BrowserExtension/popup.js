@@ -1,0 +1,165 @@
+// WardLock popup: asks the desktop app (via native messaging) which accounts
+// match the current tab's domain and fills the chosen code into the page.
+// The app is the security authority — it re-validates the domain and refuses
+// while locked; this popup is just UI.
+
+const HOST = "com.wardlock.wardlock";
+
+let port = null;
+const pending = []; // FIFO of resolvers — the host answers strictly in order
+
+function connect() {
+  port = chrome.runtime.connectNative(HOST);
+  port.onMessage.addListener((msg) => {
+    const resolve = pending.shift();
+    if (resolve) resolve(msg);
+  });
+  port.onDisconnect.addListener(() => {
+    port = null;
+    while (pending.length) pending.shift()({ ok: false, error: "host-disconnected" });
+  });
+}
+
+function request(msg) {
+  return new Promise((resolve) => {
+    if (!port) connect();
+    pending.push(resolve);
+    try {
+      port.postMessage(msg);
+    } catch (e) {
+      pending.pop();
+      resolve({ ok: false, error: "host-unavailable" });
+    }
+  });
+}
+
+const content = document.getElementById("content");
+const domainEl = document.getElementById("domain");
+
+function show(html) {
+  content.innerHTML = html;
+}
+
+function esc(s) {
+  const div = document.createElement("div");
+  div.textContent = s ?? "";
+  return div.innerHTML;
+}
+
+// Runs inside the page: finds a likely OTP input and fills it.
+// Uses the native value setter + input/change events so React/Vue forms notice.
+function fillCodeInPage(code) {
+  const isFillable = (el) =>
+    el instanceof HTMLInputElement &&
+    !el.disabled && !el.readOnly &&
+    ["text", "tel", "number", "password", ""].includes(el.type || "") &&
+    el.offsetParent !== null;
+
+  let target = isFillable(document.activeElement) ? document.activeElement : null;
+  if (!target) {
+    const selectors = [
+      'input[autocomplete="one-time-code"]',
+      'input[name*="otp" i]', 'input[id*="otp" i]',
+      'input[name*="totp" i]', 'input[name*="2fa" i]', 'input[id*="2fa" i]',
+      'input[name*="mfa" i]', 'input[id*="mfa" i]',
+      'input[name*="code" i]', 'input[id*="code" i]',
+      'input[name*="token" i]',
+      'input[inputmode="numeric"]',
+    ];
+    for (const sel of selectors) {
+      const el = [...document.querySelectorAll(sel)].find(isFillable);
+      if (el) { target = el; break; }
+    }
+  }
+  if (!target) return false;
+
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+  target.focus();
+  setter.call(target, code);
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+  target.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+
+async function fill(tab, account, hostname) {
+  const res = await request({ action: "fill-code", id: account.id, domain: hostname });
+  if (!res.ok) {
+    show(`<div class="message error">${esc(friendlyError(res.error))}</div>`);
+    return;
+  }
+
+  let filled = false;
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: fillCodeInPage,
+      args: [res.code],
+    });
+    filled = results?.[0]?.result === true;
+  } catch (e) {
+    filled = false;
+  }
+
+  if (filled) {
+    show(`<div class="message filled">✓ Code filled (${esc(String(res.secondsRemaining))}s left)</div>`);
+    setTimeout(() => window.close(), 900);
+  } else {
+    // No obvious OTP field — fall back to clipboard
+    try {
+      await navigator.clipboard.writeText(res.code);
+      show(`<div class="message">No code field found — copied <b>${esc(res.code)}</b> to clipboard.<span class="hint">Click the field and paste.</span></div>`);
+    } catch (e) {
+      show(`<div class="message">Code: <b>${esc(res.code)}</b> (${esc(String(res.secondsRemaining))}s left)</div>`);
+    }
+  }
+}
+
+function friendlyError(error) {
+  switch (error) {
+    case "locked": return "WardLock is locked. Unlock the app, then try again.";
+    case "app-not-running": return "WardLock isn't running. Start the app, then try again.";
+    case "origin-not-allowed": return "This extension isn't authorized. Re-enable browser integration in WardLock.";
+    case "domain-mismatch": return "WardLock refused: account domain doesn't match this page.";
+    default: return `WardLock error: ${error}`;
+  }
+}
+
+async function init() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  let hostname = null;
+  try {
+    const url = new URL(tab.url);
+    if (url.protocol === "http:" || url.protocol === "https:") hostname = url.hostname;
+  } catch (e) { /* chrome:// pages etc. */ }
+
+  if (!hostname) {
+    show(`<div class="message">This page can't receive codes.</div>`);
+    return;
+  }
+  domainEl.textContent = hostname;
+
+  const res = await request({ action: "accounts", domain: hostname });
+  if (!res.ok) {
+    show(`<div class="message error">${esc(friendlyError(res.error))}</div>`);
+    return;
+  }
+
+  if (res.accounts.length === 0) {
+    show(`<div class="message">No account is linked to <b>${esc(hostname)}</b>.<span class="hint">In WardLock: right-click an account → Set Fill Domain.</span></div>`);
+    return;
+  }
+
+  show("");
+  for (const account of res.accounts) {
+    const btn = document.createElement("button");
+    btn.className = "account";
+    const display = account.issuer
+      ? `${account.issuer}${account.label ? " (" + account.label + ")" : ""}`
+      : account.label;
+    btn.innerHTML = `<span class="name">${esc(display)}</span><span class="source">${esc(account.source)}</span>`;
+    btn.addEventListener("click", () => fill(tab, account, hostname));
+    content.appendChild(btn);
+  }
+}
+
+init();

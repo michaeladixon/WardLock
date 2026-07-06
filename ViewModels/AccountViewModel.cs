@@ -25,6 +25,17 @@ public partial class AccountViewModel : ObservableObject
     public bool IsShared => _account.VaultName != null;
     public string SourceLabel => IsShared ? $"\ud83d\udd17 {VaultName}" : "\ud83d\udd12 Personal";
 
+    /// <summary>Registrable domain this account fills in the browser, or null.</summary>
+    public string? Domain => _account.Domain;
+    public string DomainBadge => string.IsNullOrEmpty(Domain) ? string.Empty : $"\ud83c\udf10 {Domain}";
+
+    /// <summary>Call after the underlying account's Domain was changed and persisted.</summary>
+    public void NotifyDomainChanged()
+    {
+        OnPropertyChanged(nameof(Domain));
+        OnPropertyChanged(nameof(DomainBadge));
+    }
+
     /// <summary>
     /// Code color: mauve (#cba6f7) for shared vault accounts,
     /// green (#a6e3a1) for personal accounts.

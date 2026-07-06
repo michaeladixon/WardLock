@@ -108,7 +108,8 @@ public class SharedVaultService : IDisposable
             Algorithm = Enum.TryParse<OtpHashAlgorithm>(e.Algorithm, true, out var a) ? a : OtpHashAlgorithm.Sha1,
             Encoder = Enum.TryParse<OtpEncoder>(e.Encoder, true, out var enc) ? enc : OtpEncoder.Default,
             SortOrder = e.SortOrder,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            Domain = e.Domain
         }).ToList();
     }
 
@@ -118,7 +119,7 @@ public class SharedVaultService : IDisposable
     /// </summary>
     public void AddAccount(string issuer, string label, string plaintextSecret,
         int digits = 6, int period = 30, OtpHashAlgorithm algorithm = OtpHashAlgorithm.Sha1,
-        OtpEncoder encoder = OtpEncoder.Default)
+        OtpEncoder encoder = OtpEncoder.Default, string? domain = null)
     {
         var account = new AuthAccount
         {
@@ -130,10 +131,20 @@ public class SharedVaultService : IDisposable
             Period = period,
             Algorithm = algorithm,
             Encoder = encoder,
-            SortOrder = Accounts.Count > 0 ? Accounts.Max(a => a.SortOrder) + 1 : 0
+            SortOrder = Accounts.Count > 0 ? Accounts.Max(a => a.SortOrder) + 1 : 0,
+            Domain = domain
         };
 
         Accounts.Add(account);
+        SaveToDisk();
+    }
+
+    /// <summary>Set or clear the browser-fill domain on a vault account and persist.</summary>
+    public void UpdateAccountDomain(string id, string? domain)
+    {
+        var account = Accounts.FirstOrDefault(a => a.Id == id);
+        if (account == null) return;
+        account.Domain = domain;
         SaveToDisk();
     }
 
@@ -216,7 +227,8 @@ public class SharedVaultService : IDisposable
             Period = a.Period,
             Algorithm = a.Algorithm.ToString(),
             Encoder = a.Encoder.ToString(),
-            SortOrder = a.SortOrder > 0 ? a.SortOrder : i
+            SortOrder = a.SortOrder > 0 ? a.SortOrder : i,
+            Domain = a.Domain
         }).ToList();
 
         var plainJson = JsonSerializer.Serialize(exportAccounts, JsonOpts);
