@@ -49,8 +49,10 @@ For team-shared service accounts that need 2FA. Create a `.wardlock` vault file,
 ### System Tray Mode
 Minimizing or closing the window sends WardLock to the system tray. Double-click the tray icon or use the global hotkey to restore. Right-click the tray icon for Show/Exit.
 
-### Global Hotkey
+### Global Hotkeys
 **Ctrl+Shift+A** toggles WardLock visibility from anywhere, even when minimized to tray.
+
+**Ctrl+Shift+T** types the current code into the focused field — no copy/paste, no phone. WardLock matches the account from the focused window's title (e.g. a browser tab titled "Sign in to GitHub" matches your GitHub account); if the match is ambiguous, a small picker appears at the cursor. Codes are never typed while the vault is locked.
 
 ### Drag-and-Drop Reordering
 Grab the ≡ handle on any account entry and drag it to reorder. Sort order persists across sessions.
@@ -136,6 +138,7 @@ WardLock/
 ├── Services/
 │   ├── AccountStore.cs             # JSON persistence + URI parsing + reorder
 │   ├── AppSettings.cs              # Settings persistence + recent vault paths
+│   ├── AutoTypeService.cs          # Foreground-window detection + SendInput typing
 │   ├── ExportImportService.cs      # AES-256-GCM export/import
 │   ├── GlobalHotkeyService.cs      # Win32 hotkey registration
 │   ├── GoogleAuthMigrationDecoder.cs # Google Authenticator migration QR import
@@ -150,11 +153,13 @@ WardLock/
 ├── ViewModels/
 │   ├── AccountViewModel.cs         # Per-account display logic + source badge
 │   ├── MainViewModel.cs            # App orchestration + vault management
+│   ├── MainViewModel.AutoType.cs   # Window-title matching + auto-type flow
 │   ├── MainViewModel.Search.cs     # Search/filter logic
 │   └── Services/
 │       ├── QrCoordinator.cs        # QR scan coordination
 │       └── SharedVaultCoordinator.cs # Shared vault coordination
 ├── Views/
+│   ├── AutoTypePickerWindow.xaml/.cs # Account picker popup for auto-type
 │   ├── PasswordDialog.xaml/.cs     # Export/import/vault password entry
 │   └── ScreenCaptureOverlay.xaml/.cs # Region selection overlay for QR scan
 ├── MainWindow.xaml/.cs             # Main UI + tray + hotkey lifecycle
@@ -167,5 +172,6 @@ WardLock/
 | Shortcut | Action |
 |---|---|
 | Ctrl+Shift+A | Show/hide WardLock (global) |
+| Ctrl+Shift+T | Auto-type current code into focused field (global) |
 | Click entry | Copy code to clipboard |
 | Esc (in region selector) | Cancel QR scan |
