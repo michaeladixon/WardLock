@@ -27,11 +27,12 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Register global hotkey (Ctrl+Shift+A)
+        // Register global hotkeys (Ctrl+Shift+A show/hide, Ctrl+Shift+T auto-type)
         if (_hotkey.Register(this))
         {
             _hotkey.HotkeyPressed += OnGlobalHotkey;
         }
+        _hotkey.AutoTypeHotkeyPressed += OnAutoTypeHotkey;
 
         // Wire minimize/restore so the ViewModel can control the window during QR scan
         var vm = (MainViewModel)DataContext;
@@ -77,6 +78,12 @@ public partial class MainWindow : Window
             HideToTray();
         else
             ShowFromTray();
+    }
+
+    private void OnAutoTypeHotkey()
+    {
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        ((MainViewModel)DataContext).AutoTypeIntoForegroundWindow(hwnd);
     }
 
     private void OnStateChanged(object sender, EventArgs e)

@@ -513,7 +513,7 @@
                         </ItemsControl>
 
                         <Separator Background="#45475a" Margin="4,8"/>
-                        <TextBlock Text="Ctrl+Shift+A  &#8212;  show / hide  |  Ctrl+F  &#8212;  search" FontSize="10"
+                        <TextBlock Text="Ctrl+Shift+A &#8212; show / hide | Ctrl+Shift+T &#8212; type code | Ctrl+F &#8212; search" FontSize="10"
                                    Foreground="#585b70" Margin="8,0,8,6" FontStyle="Italic"
                                    HorizontalAlignment="Center"/>
                     </StackPanel>
