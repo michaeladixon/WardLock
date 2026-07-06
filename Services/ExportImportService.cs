@@ -36,7 +36,8 @@ public static class ExportImportService
             Period = a.Period,
             Algorithm = a.Algorithm.ToString(),
             Encoder = a.Encoder.ToString(),
-            SortOrder = a.SortOrder > 0 ? a.SortOrder : i
+            SortOrder = a.SortOrder > 0 ? a.SortOrder : i,
+            Domain = a.Domain
         }).ToList();
 
         var plainJson = JsonSerializer.Serialize(exportAccounts, JsonOpts);
@@ -106,7 +107,8 @@ public static class ExportImportService
             Algorithm = Enum.TryParse<OtpHashAlgorithm>(e.Algorithm, true, out var a) ? a : OtpHashAlgorithm.Sha1,
             Encoder = Enum.TryParse<OtpEncoder>(e.Encoder, true, out var enc) ? enc : OtpEncoder.Default,
             SortOrder = e.SortOrder,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            Domain = e.Domain
         }).ToList();
     }
 

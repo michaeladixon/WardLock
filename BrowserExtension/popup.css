@@ -1,0 +1,90 @@
+body {
+  width: 300px;
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  font-size: 13px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: #181825;
+}
+
+.logo {
+  font-weight: 700;
+  color: #89b4fa;
+  font-size: 14px;
+}
+
+.domain {
+  font-size: 11px;
+  color: #74c7ec;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#content {
+  padding: 8px;
+}
+
+.message {
+  padding: 14px 8px;
+  text-align: center;
+  color: #a6adc8;
+  line-height: 1.5;
+}
+
+.message .hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #585b70;
+}
+
+.account {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  margin: 2px 0;
+  border: none;
+  border-radius: 6px;
+  background: #313244;
+  color: #cdd6f4;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account:hover {
+  background: #45475a;
+}
+
+.account .source {
+  font-size: 9px;
+  color: #585b70;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.account .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filled {
+  color: #a6e3a1;
+}
+
+.error {
+  color: #f38ba8;
+}

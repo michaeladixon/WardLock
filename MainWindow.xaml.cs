@@ -146,6 +146,20 @@ public partial class MainWindow : Window
             vm.CopyToClipboardCommand.Execute(null);
     }
 
+    private void OnContextSetDomain(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.DataContext is not AccountViewModel account) return;
+        var mainVm = (MainViewModel)DataContext;
+
+        var dlg = new Views.InputDialog(
+            $"Fill domain for \"{account.DisplayName}\" — the browser extension only offers this code on this domain (e.g. github.com). Leave empty to disable browser fill.",
+            account.Domain ?? string.Empty)
+        { Owner = this };
+
+        if (dlg.ShowDialog() == true)
+            mainVm.SetAccountDomain(account, dlg.Value);
+    }
+
     private void OnContextMoveToVault(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuItem mi || mi.DataContext is not AccountViewModel account) return;

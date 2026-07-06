@@ -54,6 +54,11 @@ Minimizing or closing the window sends WardLock to the system tray. Double-click
 
 **Ctrl+Shift+T** types the current code into the focused field — no copy/paste, no phone. WardLock matches the account from the focused window's title (e.g. a browser tab titled "Sign in to GitHub" matches your GitHub account); if the match is ambiguous, a small picker appears at the cursor. Codes are never typed while the vault is locked.
 
+### Browser Extension (domain-verified fill)
+A Chrome/Edge extension delivers codes with one click — and **only on the real site**. Each account can store a fill domain (right-click → Set Fill Domain); the extension only offers and fills a code when the page's hostname equals that domain or is a subdomain of it, matched at label boundaries so `github.com.evil.com` can never receive your GitHub code. Communication is 100% local via native messaging (WardLock.exe doubles as the host process, relaying to the running app over a per-user named pipe). The app validates the calling extension's origin on every connection and refuses all requests while locked.
+
+Setup: menu (≡) → **Enable Browser Integration**, then load the [`BrowserExtension`](BrowserExtension/README.md) folder unpacked in `chrome://extensions`. Not compatible with MSIX-installed builds yet (the browser can't launch executables inside `WindowsApps`) — use a loose build for browser integration.
+
 ### Drag-and-Drop Reordering
 Grab the ≡ handle on any account entry and drag it to reorder. Sort order persists across sessions.
 
@@ -83,6 +88,7 @@ In Google Authenticator: Transfer accounts → Export accounts → scan the disp
 - **Settings** at `%LOCALAPPDATA%\WardLock\settings.json`
 - **System tray** via [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon)
 - **Global hotkey** via Win32 RegisterHotKey interop
+- **Browser fill** via Chrome native messaging (stdio proxy → named pipe, `CurrentUserOnly`)
 - **QR scanning** via [ZXing.NET](https://github.com/micjahn/ZXing.Net) + GDI+ screen capture
 - **Windows Hello** via WinRT UserConsentVerifier interop
 
@@ -132,6 +138,7 @@ Stamps the Partner Center identity into the manifest and skips local signing (th
 WardLock/
 ├── Behaviors/
 │   └── DragDropReorder.cs          # ListBox drag-and-drop reordering
+├── BrowserExtension/               # MV3 Chrome/Edge extension (load unpacked)
 ├── Models/
 │   ├── AuthAccount.cs              # Account data model (personal + shared vault)
 │   └── ExportPayload.cs            # Encrypted backup/vault format
@@ -139,6 +146,8 @@ WardLock/
 │   ├── AccountStore.cs             # JSON persistence + URI parsing + reorder
 │   ├── AppSettings.cs              # Settings persistence + recent vault paths
 │   ├── AutoTypeService.cs          # Foreground-window detection + SendInput typing
+│   ├── BrowserBridge/              # Native messaging: framing, proxy, pipe server, installer
+│   ├── DomainMatcher.cs            # Label-anchored registrable-domain matching
 │   ├── ExportImportService.cs      # AES-256-GCM export/import
 │   ├── GlobalHotkeyService.cs      # Win32 hotkey registration
 │   ├── GoogleAuthMigrationDecoder.cs # Google Authenticator migration QR import
@@ -154,6 +163,7 @@ WardLock/
 │   ├── AccountViewModel.cs         # Per-account display logic + source badge
 │   ├── MainViewModel.cs            # App orchestration + vault management
 │   ├── MainViewModel.AutoType.cs   # Window-title matching + auto-type flow
+│   ├── MainViewModel.BrowserBridge.cs # Extension request handling + fill domains
 │   ├── MainViewModel.Search.cs     # Search/filter logic
 │   └── Services/
 │       ├── QrCoordinator.cs        # QR scan coordination

@@ -15,6 +15,12 @@ public class AuthAccount
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int SortOrder { get; set; }
 
+    /// <summary>
+    /// Registrable domain (eTLD+1, e.g. "github.com") this account fills codes for
+    /// in the browser extension. Null = never offered to the browser.
+    /// </summary>
+    public string? Domain { get; set; }
+
     // ── Shared vault in-memory fields (never serialized) ──
 
     /// <summary>

@@ -67,6 +67,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _manualSecret = string.Empty;
 
+    [ObservableProperty]
+    private string _manualDomain = string.Empty;
+
     /// <summary>Target for adding accounts: null=personal, vault name=shared vault.</summary>
     [ObservableProperty]
     private string? _addTarget;
@@ -101,6 +104,8 @@ public partial class MainViewModel : ObservableObject
         // instantiate coordinators after basic fields are constructed
         _vaultCoordinator = new Services.SharedVaultCoordinator(_openVaults, Accounts, OpenVaultNames, AddTargetOptions, _store, s => StatusMessage = s);
         _qrCoordinator = new Services.QrCoordinator(_store, Accounts, () => GetSelectedVault(), s => StatusMessage = s);
+
+        StartBrowserBridge();
     }
 
     private void UpdateVaultIndicator()
@@ -360,10 +365,12 @@ public partial class MainViewModel : ObservableObject
                 return;
             }
 
+            var domain = DomainMatcher.Normalize(ManualDomain);
+
             var targetVault = GetSelectedVault();
             if (targetVault != null)
             {
-                targetVault.AddAccount(ManualIssuer.Trim(), ManualLabel.Trim(), secret);
+                targetVault.AddAccount(ManualIssuer.Trim(), ManualLabel.Trim(), secret, domain: domain);
                 var account = targetVault.Accounts.Last();
                 Accounts.Add(new AccountViewModel(account));
                 StatusMessage = $"Added {ManualIssuer.Trim()} to vault '{targetVault.VaultName}'";
@@ -374,7 +381,8 @@ public partial class MainViewModel : ObservableObject
                 {
                     Issuer = ManualIssuer.Trim(),
                     Label = ManualLabel.Trim(),
-                    EncryptedSecret = SecretVault.Encrypt(secret)
+                    EncryptedSecret = SecretVault.Encrypt(secret),
+                    Domain = domain
                 };
                 _store.Add(account);
                 Accounts.Add(new AccountViewModel(account));
@@ -384,6 +392,7 @@ public partial class MainViewModel : ObservableObject
             ManualIssuer = string.Empty;
             ManualLabel = string.Empty;
             ManualSecret = string.Empty;
+            ManualDomain = string.Empty;
             IsAddPanelVisible = false;
         }
         catch (Exception ex)
@@ -744,7 +753,7 @@ public partial class MainViewModel : ObservableObject
 
         var plaintext = SecretVault.Decrypt(personal.EncryptedSecret);
         vault.AddAccount(personal.Issuer, personal.Label, plaintext,
-            personal.Digits, personal.Period, personal.Algorithm, personal.Encoder);
+            personal.Digits, personal.Period, personal.Algorithm, personal.Encoder, personal.Domain);
 
         _store.Remove(personal.Id);
 
@@ -772,7 +781,8 @@ public partial class MainViewModel : ObservableObject
             EncryptedSecret = SecretVault.Encrypt(plaintext),
             Digits          = vaultAccount.Digits,
             Period          = vaultAccount.Period,
-            Algorithm       = vaultAccount.Algorithm
+            Algorithm       = vaultAccount.Algorithm,
+            Domain          = vaultAccount.Domain
         };
 
         vault.RemoveAccount(vaultAccount.Id);
@@ -970,6 +980,7 @@ public partial class MainViewModel : ObservableObject
 
     public void Shutdown()
     {
+        _bridgeServer?.Dispose();
         foreach (var vault in _openVaults)
             vault.Dispose();
         _openVaults.Clear();
