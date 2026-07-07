@@ -1,0 +1,76 @@
+<Window x:Class="WardLock.Views.AuditLogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Vault Audit Log" Height="480" Width="640"
+        WindowStartupLocation="CenterOwner"
+        Background="#1e1e2e" Foreground="#cdd6f4">
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="TitleText" Grid.Row="0" FontSize="16" FontWeight="SemiBold"
+                   Margin="0,0,0,8"/>
+
+        <!-- Chain integrity banner -->
+        <Border x:Name="ChainBanner" Grid.Row="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,10">
+            <TextBlock x:Name="ChainText" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+        </Border>
+
+        <ListView x:Name="EntryList" Grid.Row="2"
+                  Background="#181825" BorderThickness="0" Foreground="#cdd6f4"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Padding" Value="8,5"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListViewItem">
+                                <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter/>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="36"/>
+                            <ColumnDefinition Width="128"/>
+                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="130"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Seq}" FontSize="11" Foreground="#585b70"/>
+                        <TextBlock Grid.Column="1" Text="{Binding LocalTime}" FontSize="11" Foreground="#a6adc8"/>
+                        <TextBlock Grid.Column="2" Text="{Binding User}" FontSize="11" Foreground="#89b4fa"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="3" Text="{Binding Action}" FontSize="11" Foreground="{Binding ActionColor}"/>
+                        <TextBlock Grid.Column="4" Text="{Binding TargetDetail}" FontSize="11" Foreground="#cdd6f4"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <DockPanel Grid.Row="3" Margin="0,10,0,0">
+            <Button DockPanel.Dock="Right" Content="Export CSV" Padding="14,7"
+                    Background="#89b4fa" Foreground="#1e1e2e" FontWeight="SemiBold"
+                    BorderThickness="0" Cursor="Hand" Click="OnExportCsv"/>
+            <Button DockPanel.Dock="Right" Content="Refresh" Padding="14,7" Margin="0,0,8,0"
+                    Background="#313244" Foreground="#cdd6f4"
+                    BorderThickness="0" Cursor="Hand" Click="OnRefresh"/>
+            <TextBlock x:Name="CountText" FontSize="11" Foreground="#585b70"
+                       VerticalAlignment="Center"/>
+        </DockPanel>
+    </Grid>
+</Window>

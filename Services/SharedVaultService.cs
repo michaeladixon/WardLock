@@ -33,6 +33,9 @@ public class SharedVaultService : IDisposable
     public List<AuthAccount> Accounts { get; private set; } = [];
     public bool IsOpen { get; private set; }
 
+    /// <summary>Tamper-evident sidecar audit log (issue #3).</summary>
+    public VaultAuditLog AuditLog { get; }
+
     private string _password = string.Empty;
     private FileSystemWatcher? _watcher;
     private DateTime _lastWriteByUs = DateTime.MinValue;
@@ -44,6 +47,7 @@ public class SharedVaultService : IDisposable
     {
         FilePath = filePath;
         VaultName = Path.GetFileNameWithoutExtension(filePath);
+        AuditLog = new VaultAuditLog(filePath);
     }
 
     /// <summary>
@@ -56,6 +60,7 @@ public class SharedVaultService : IDisposable
         Reload();
         StartWatching();
         IsOpen = true;
+        AuditLog.TryAppend(AuditAction.VaultOpened);
     }
 
     /// <summary>
@@ -69,6 +74,7 @@ public class SharedVaultService : IDisposable
         service.SaveToDisk();
         service.StartWatching();
         service.IsOpen = true;
+        service.AuditLog.TryAppend(AuditAction.VaultCreated);
         return service;
     }
 
@@ -137,6 +143,7 @@ public class SharedVaultService : IDisposable
 
         Accounts.Add(account);
         SaveToDisk();
+        AuditLog.TryAppend(AuditAction.AccountAdded, DisplayName(account));
     }
 
     /// <summary>Set or clear the browser-fill domain on a vault account and persist.</summary>
@@ -146,7 +153,11 @@ public class SharedVaultService : IDisposable
         if (account == null) return;
         account.Domain = domain;
         SaveToDisk();
+        AuditLog.TryAppend(AuditAction.DomainChanged, DisplayName(account), domain ?? "(cleared)");
     }
+
+    private static string DisplayName(AuthAccount a)
+        => string.IsNullOrEmpty(a.Issuer) ? a.Label : $"{a.Issuer} ({a.Label})";
 
     /// <summary>
     /// Add an account from an otpauth:// URI to this shared vault.
@@ -203,13 +214,17 @@ public class SharedVaultService : IDisposable
 
         Accounts.Add(account);
         SaveToDisk();
+        AuditLog.TryAppend(AuditAction.AccountAdded, DisplayName(account));
         return account;
     }
 
     public void RemoveAccount(string id)
     {
+        var removed = Accounts.FirstOrDefault(a => a.Id == id);
         Accounts.RemoveAll(a => a.Id == id);
         SaveToDisk();
+        if (removed != null)
+            AuditLog.TryAppend(AuditAction.AccountRemoved, DisplayName(removed));
     }
 
     /// <summary>

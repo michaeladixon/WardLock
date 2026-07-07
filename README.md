@@ -46,6 +46,11 @@ For team-shared service accounts that need 2FA. Create a `.wardlock` vault file,
 4. Each team member: Menu → Open Shared Vault → enter password
 5. Anyone can add/remove accounts — changes propagate to all users automatically
 
+### Vault Audit Trail
+Every shared vault keeps a tamper-evident audit log in a sidecar file next to the vault (`team-vault.wardlock.log`): vault created/opened, account added/removed, fill-domain changes, and every code access (copy, hotkey auto-type, browser fill) — stamped with the acting member's Windows username and UTC time. Entries are hash-chained (each record embeds the previous record's SHA-256), so any edit, deletion, or reordering breaks the chain and is flagged with a tamper warning — no server needed. View it from the menu (📜 next to each open vault) and export to CSV for compliance.
+
+**Threat model — read this before relying on it:** the log is written by cooperating WardLock clients. The hash chain makes silent *modification* of history evident; it does not make the log unforgeable. A member with write access to the share can delete the log wholesale or truncate its tail (truncation is only evident against an expected entry count or a retained copy — for compliance, export CSV snapshots periodically). Identity comes from the Windows username, which a hostile member controls on their own machine. In short: it's an honest-participant accountability trail, comparable to what team-2FA SaaS products offer, not a cryptographic guarantee against a malicious insider.
+
 ### System Tray Mode
 Minimizing or closing the window sends WardLock to the system tray. Double-click the tray icon or use the global hotkey to restore. Right-click the tray icon for Show/Exit.
 
@@ -157,6 +162,7 @@ WardLock/
 │   ├── SecretVault.cs              # DPAPI encryption wrapper
 │   ├── SharedVaultService.cs       # Shared team vault (open/create/watch/edit)
 │   ├── TotpGenerator.cs            # TOTP code generation
+│   ├── VaultAuditLog.cs            # Hash-chained tamper-evident vault audit trail
 │   ├── VaultPasswordCache.cs       # In-memory vault password caching
 │   └── WindowsHelloService.cs      # Biometric authentication via WinRT
 ├── ViewModels/
@@ -169,6 +175,7 @@ WardLock/
 │       ├── QrCoordinator.cs        # QR scan coordination
 │       └── SharedVaultCoordinator.cs # Shared vault coordination
 ├── Views/
+│   ├── AuditLogWindow.xaml/.cs     # Vault audit trail viewer + CSV export
 │   ├── AutoTypePickerWindow.xaml/.cs # Account picker popup for auto-type
 │   ├── PasswordDialog.xaml/.cs     # Export/import/vault password entry
 │   └── ScreenCaptureOverlay.xaml/.cs # Region selection overlay for QR scan

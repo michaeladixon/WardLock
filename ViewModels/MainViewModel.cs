@@ -106,6 +106,19 @@ public partial class MainViewModel : ObservableObject
         _qrCoordinator = new Services.QrCoordinator(_store, Accounts, () => GetSelectedVault(), s => StatusMessage = s);
 
         StartBrowserBridge();
+
+        AccountViewModel.SharedCodeCopied += OnSharedCodeCopied;
+    }
+
+    private void OnSharedCodeCopied(AccountViewModel vm)
+        => LogVaultCodeAccess(vm, AuditAction.CodeCopied);
+
+    /// <summary>Appends a code-access event to the owning vault's audit log.</summary>
+    public void LogVaultCodeAccess(AccountViewModel vm, AuditAction action, string detail = "")
+    {
+        if (!vm.IsShared) return;
+        var vault = _openVaults.FirstOrDefault(v => v.VaultName == vm.VaultName);
+        vault?.AuditLog.TryAppend(action, vm.DisplayName, detail);
     }
 
     private void UpdateVaultIndicator()
@@ -532,6 +545,19 @@ public partial class MainViewModel : ObservableObject
         {
             StatusMessage = $"Failed to open vault: {ex.Message}";
         }
+    }
+
+    [RelayCommand]
+    private void ShowAuditLog(string? vaultName)
+    {
+        if (string.IsNullOrEmpty(vaultName)) return;
+        var vault = _openVaults.FirstOrDefault(v => v.VaultName == vaultName);
+        if (vault == null) return;
+
+        new AuditLogWindow(vaultName, vault.AuditLog)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow
+        }.Show();
     }
 
     [RelayCommand]
@@ -980,6 +1006,7 @@ public partial class MainViewModel : ObservableObject
 
     public void Shutdown()
     {
+        AccountViewModel.SharedCodeCopied -= OnSharedCodeCopied;
         _bridgeServer?.Dispose();
         foreach (var vault in _openVaults)
             vault.Dispose();
