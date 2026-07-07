@@ -41,6 +41,32 @@ public class AuthAccount
     /// </summary>
     [JsonIgnore]
     public string? VaultName { get; set; }
+
+    /// <summary>
+    /// Precomputed code window for viewer-role vault accounts (no seed present).
+    /// When set, TotpGenerator looks codes up here instead of computing them.
+    /// </summary>
+    [JsonIgnore]
+    public CodeWindow? CodeWindow { get; set; }
+}
+
+/// <summary>
+/// A viewer's precomputed codes: fixed-width concatenation indexed by RFC 6238
+/// timestep. See docs/viewer-role.md.
+/// </summary>
+public class CodeWindow
+{
+    public long StartStep { get; init; }
+    public int Width { get; init; }
+    public string Codes { get; init; } = string.Empty;
+
+    /// <summary>Code for the given unix time, or null when outside the window.</summary>
+    public string? CodeAt(long unixSeconds, int period)
+    {
+        var index = unixSeconds / period - StartStep;
+        if (index < 0 || (index + 1) * Width > Codes.Length) return null;
+        return Codes.Substring((int)index * Width, Width);
+    }
 }
 
 public enum OtpHashAlgorithm

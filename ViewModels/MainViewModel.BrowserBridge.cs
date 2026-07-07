@@ -75,6 +75,11 @@ public partial class MainViewModel
         {
             var vault = _openVaults.FirstOrDefault(v => v.VaultName == vm.VaultName);
             if (vault == null) return;
+            if (vault.IsViewer)
+            {
+                StatusMessage = $"'{vault.VaultName}' is open as viewer — codes only, no changes.";
+                return;
+            }
             vault.UpdateAccountDomain(vm.Id, domain);
         }
         else
@@ -98,6 +103,11 @@ public partial class MainViewModel
         {
             var vault = _openVaults.FirstOrDefault(v => v.VaultName == vm.VaultName);
             if (vault == null) return;
+            if (vault.IsViewer)
+            {
+                StatusMessage = $"'{vault.VaultName}' is open as viewer — codes only, no changes.";
+                return;
+            }
             vault.UpdateAccountApproval(vm.Id, requireApproval);
         }
         else

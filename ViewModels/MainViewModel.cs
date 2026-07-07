@@ -118,7 +118,10 @@ public partial class MainViewModel : ObservableObject
     {
         if (!vm.IsShared) return;
         var vault = _openVaults.FirstOrDefault(v => v.VaultName == vm.VaultName);
-        vault?.AuditLog.TryAppend(action, vm.DisplayName, detail);
+        if (vault == null) return;
+        if (vault.IsViewer)
+            detail = detail.Length == 0 ? "[viewer]" : $"{detail} [viewer]";
+        vault.AuditLog.TryAppend(action, vm.DisplayName, detail);
     }
 
     private void UpdateVaultIndicator()
@@ -432,6 +435,11 @@ public partial class MainViewModel : ObservableObject
         if (vm.IsShared)
         {
             var vault = _openVaults.FirstOrDefault(v => v.VaultName == vm.VaultName);
+            if (vault?.IsViewer == true)
+            {
+                StatusMessage = $"'{vault.VaultName}' is open as viewer — codes only, no changes.";
+                return;
+            }
             vault?.RemoveAccount(vm.Id);
         }
         else
@@ -538,7 +546,9 @@ public partial class MainViewModel : ObservableObject
             VaultPasswordCache.Store(dlg.FileName, pwDialog.Password);
             AppSettings.AddRememberedVaultPath(dlg.FileName);
 
-            StatusMessage = $"Opened vault '{vault.VaultName}' with {vault.Accounts.Count} account(s). Vault will reconnect automatically.";
+            StatusMessage = vault.IsViewer
+                ? $"Opened vault '{vault.VaultName}' as viewer with {vault.Accounts.Count} account(s) — codes only."
+                : $"Opened vault '{vault.VaultName}' with {vault.Accounts.Count} account(s). Vault will reconnect automatically.";
         }
         catch (System.Security.Cryptography.AuthenticationTagMismatchException)
         {
@@ -561,6 +571,42 @@ public partial class MainViewModel : ObservableObject
         {
             Owner = System.Windows.Application.Current?.MainWindow
         }.Show();
+    }
+
+    /// <summary>
+    /// Set or rotate the vault's viewer password (issue #3 viewer role).
+    /// Rotation generates a fresh viewer key, so old passwords stop working.
+    /// </summary>
+    [RelayCommand]
+    private void SetViewerPassword(string? vaultName)
+    {
+        if (string.IsNullOrEmpty(vaultName)) return;
+        var vault = _openVaults.FirstOrDefault(v => v.VaultName == vaultName);
+        if (vault == null) return;
+
+        if (vault.IsViewer)
+        {
+            StatusMessage = $"'{vaultName}' is open as viewer — only admins manage viewer access.";
+            return;
+        }
+
+        var pwDialog = new PasswordDialog(
+            vault.HasViewerAccess
+                ? $"New viewer password for '{vaultName}' (rotates the viewer key — the old password stops working):"
+                : $"Choose a viewer password for '{vaultName}'. Viewers get current codes but can never export or reveal the secrets:",
+            true);
+        if (pwDialog.ShowDialog() != true || string.IsNullOrEmpty(pwDialog.Password))
+            return;
+
+        try
+        {
+            vault.SetViewerPassword(pwDialog.Password);
+            StatusMessage = $"Viewer password set for '{vaultName}'. Share it with code-only members.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Failed to set viewer password: {ex.Message}";
+        }
     }
 
     [RelayCommand]
@@ -607,7 +653,8 @@ public partial class MainViewModel : ObservableObject
     {
         _openVaults.Add(vault);
         OpenVaultNames.Add(vault.VaultName);
-        AddTargetOptions.Add(vault.VaultName);
+        if (!vault.IsViewer) // viewers can't add accounts to the vault
+            AddTargetOptions.Add(vault.VaultName);
 
         foreach (var acct in vault.Accounts)
             Accounts.Add(new AccountViewModel(acct));
@@ -776,6 +823,11 @@ public partial class MainViewModel : ObservableObject
 
         var vault = _openVaults.FirstOrDefault(v => v.VaultName == vaultName);
         if (vault == null) return;
+        if (vault.IsViewer)
+        {
+            StatusMessage = $"'{vaultName}' is open as viewer — codes only, no changes.";
+            return;
+        }
 
         var personal = _store.Accounts.FirstOrDefault(a => a.Id == accountVm.Id);
         if (personal == null) return;
@@ -798,6 +850,12 @@ public partial class MainViewModel : ObservableObject
 
         var vault = _openVaults.FirstOrDefault(v => v.VaultName == accountVm.VaultName);
         if (vault == null) return;
+        if (vault.IsViewer)
+        {
+            // The seed isn't even in this process — see docs/viewer-role.md
+            StatusMessage = $"'{vault.VaultName}' is open as viewer — secrets can't be extracted.";
+            return;
+        }
 
         var vaultAccount = vault.Accounts.FirstOrDefault(a => a.Id == accountVm.Id);
         if (vaultAccount == null) return;

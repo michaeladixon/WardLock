@@ -512,6 +512,13 @@
                                                 Command="{Binding DataContext.ShowAuditLogCommand,
                                                     RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}"/>
+                                        <Button DockPanel.Dock="Right" Content="&#128065;" FontSize="10"
+                                                ToolTip="Set / rotate viewer password (codes-only access)"
+                                                Background="Transparent" BorderThickness="0"
+                                                Cursor="Hand" Padding="4,4"
+                                                Command="{Binding DataContext.SetViewerPasswordCommand,
+                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"/>
                                         <TextBlock Text="{Binding StringFormat='&#128279;  {0}'}"
                                                    FontSize="11" Foreground="#a6e3a1"
                                                    VerticalAlignment="Center" Margin="14,0,0,0"/>
