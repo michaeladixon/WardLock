@@ -15,8 +15,10 @@ function connect() {
     if (resolve) resolve(msg);
   });
   port.onDisconnect.addListener(() => {
+    // Capture Chrome's real reason (host not found / forbidden / exited) before it clears
+    const detail = chrome.runtime.lastError?.message || "";
     port = null;
-    while (pending.length) pending.shift()({ ok: false, error: "host-disconnected" });
+    while (pending.length) pending.shift()({ ok: false, error: "native-disconnect", detail });
   });
 }
 
@@ -28,7 +30,7 @@ function request(msg) {
       port.postMessage(msg);
     } catch (e) {
       pending.pop();
-      resolve({ ok: false, error: "host-unavailable" });
+      resolve({ ok: false, error: "native-disconnect", detail: chrome.runtime.lastError?.message || "" });
     }
   });
 }
@@ -84,7 +86,7 @@ function fillCodeInPage(code) {
 async function fill(tab, account, hostname) {
   const res = await request({ action: "fill-code", id: account.id, domain: hostname });
   if (!res.ok) {
-    show(`<div class="message error">${esc(friendlyError(res.error))}</div>`);
+    show(`<div class="message error">${esc(friendlyError(res))}</div>`);
     return;
   }
 
@@ -114,12 +116,24 @@ async function fill(tab, account, hostname) {
   }
 }
 
-function friendlyError(error) {
+function friendlyError(res) {
+  const error = typeof res === "string" ? res : res.error;
+  const detail = (typeof res === "object" && res.detail) || "";
+
   switch (error) {
     case "locked": return "WardLock is locked. Unlock the app, then try again.";
     case "app-not-running": return "WardLock isn't running. Start the app, then try again.";
     case "origin-not-allowed": return "This extension isn't authorized. Re-enable browser integration in WardLock.";
     case "domain-mismatch": return "WardLock refused: account domain doesn't match this page.";
+    case "native-disconnect":
+      // Surface Chrome's actual native-messaging failure reason
+      if (/not found/i.test(detail))
+        return "WardLock's browser host isn't registered. In WardLock: menu (≡) → Enable Browser Integration, then reopen this popup.";
+      if (/forbidden/i.test(detail))
+        return "This extension's ID isn't authorized for the WardLock host. Confirm the ID is hcbclfghekjpdgnbfnmfeaamigencjjf, then re-enable browser integration.";
+      if (/exited|crashed/i.test(detail))
+        return "WardLock's browser helper stopped. Make sure the WardLock app is running, then try again.";
+      return "Can't reach WardLock. Make sure the app is running and browser integration is enabled." + (detail ? ` (${detail})` : "");
     default: return `WardLock error: ${error}`;
   }
 }
@@ -140,7 +154,7 @@ async function init() {
 
   const res = await request({ action: "accounts", domain: hostname });
   if (!res.ok) {
-    show(`<div class="message error">${esc(friendlyError(res.error))}</div>`);
+    show(`<div class="message error">${esc(friendlyError(res))}</div>`);
     return;
   }
 
