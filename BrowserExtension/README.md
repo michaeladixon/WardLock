@@ -22,6 +22,19 @@ On a login page, click the WardLock toolbar icon. Accounts whose fill domain
 matches the page are listed; click one and the code is filled into the OTP field
 (clipboard fallback if no field is found).
 
+## Troubleshooting
+
+- **"WardLock is running as administrator…"** — the browser runs at medium
+  integrity and Windows blocks it from reaching an elevated process's pipe.
+  This happens when WardLock is launched from an elevated Visual Studio (F5)
+  or an admin terminal. Restart WardLock normally, or run Visual Studio
+  non-elevated.
+- **"WardLock isn't running"** — the extension gets codes from the live app;
+  start WardLock (it can sit in the tray).
+- **"…host isn't registered"** — click *Enable Browser Integration* in the
+  WardLock menu, then reopen the popup. Re-run it any time the exe moves
+  (e.g. after switching Debug/Release build paths).
+
 ## Security model
 
 - **Domain-verified:** WardLock only releases a code when the page's hostname

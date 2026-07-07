@@ -123,6 +123,8 @@ function friendlyError(res) {
   switch (error) {
     case "locked": return "WardLock is locked. Unlock the app, then try again.";
     case "app-not-running": return "WardLock isn't running. Start the app, then try again.";
+    case "app-elevated": return "WardLock is running as administrator, so the browser can't reach it. Restart WardLock normally (not elevated).";
+    case "app-unreachable": return "Couldn't reach the WardLock app. Restart it, then try again.";
     case "origin-not-allowed": return "This extension isn't authorized. Re-enable browser integration in WardLock.";
     case "domain-mismatch": return "WardLock refused: account domain doesn't match this page.";
     case "native-disconnect":

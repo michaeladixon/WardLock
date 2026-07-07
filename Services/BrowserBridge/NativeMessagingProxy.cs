@@ -32,9 +32,9 @@ public static class NativeMessagingProxy
                 {
                     request = NativeMessagingFraming.ReadMessage(stdin);
                 }
-                catch (InvalidDataException)
+                catch (Exception)
                 {
-                    return; // malformed browser frame — bail out
+                    return; // malformed frame or browser closed the port — bail out
                 }
                 if (request == null) return; // browser closed the port
 
@@ -93,10 +93,27 @@ public static class NativeMessagingProxy
             }
             return pipe;
         }
-        catch (Exception ex) when (ex is TimeoutException or IOException)
+        catch (TimeoutException)
         {
             pipe.Dispose();
             NativeMessagingFraming.WriteMessage(stdout, new { ok = false, error = "app-not-running" });
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The pipe exists but this (medium-integrity) proxy can't open it — the
+            // app is running at a higher integrity level (launched elevated / from an
+            // administrator Visual Studio) while the browser runs normally.
+            pipe.Dispose();
+            NativeMessagingFraming.WriteMessage(stdout, new { ok = false, error = "app-elevated" });
+            return null;
+        }
+        catch (Exception)
+        {
+            // Never let the native host crash on an unexpected pipe error — that
+            // surfaces as an opaque "host exited" with no actionable detail.
+            pipe.Dispose();
+            NativeMessagingFraming.WriteMessage(stdout, new { ok = false, error = "app-unreachable" });
             return null;
         }
     }
