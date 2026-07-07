@@ -200,6 +200,10 @@ Add-AppxPackage -Path .\WardLock_1.0.0.0.msix
 | `-RunWack` | Run Windows App Certification Kit after build |
 | `-Store` | Partner Center identity, unsigned (Store re-signs) |
 
+### Releases (CI)
+
+Tagging `vX.Y.Z` on a `release/x.y.z` branch runs the [release workflow](.github/workflows/release.yml): store + sideload MSIX and a loose zip land on a GitHub Release, and an approval-gated job publishes to the Microsoft Store via `msstore`. Process and one-time setup: [`docs/releasing.md`](docs/releasing.md).
+
 **Store submission:** `.\build-msix.ps1 -Store -Version "1.0.0.0"` → upload to Partner Center.
 
 *Requires the Windows 10/11 SDK for `MakeAppx.exe` / `SignTool.exe`.*

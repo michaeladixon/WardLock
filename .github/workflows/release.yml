@@ -1,0 +1,187 @@
+# WardLock release pipeline (docs/releasing.md)
+#
+# Flow: main is the development branch. To release, branch release/x.y.z from
+# main, tag it vX.Y.Z, and push branch + tag. The tag triggers this workflow:
+#   1. build   — MSIX store package, signed sideload package (if a signing
+#                cert is configured in secrets), and a loose zip for
+#                browser-extension users (MSIX can't host native messaging).
+#   2. release — GitHub Release on the tag with the installable artifacts.
+#   3. store   — publishes the store package to Partner Center via the
+#                Microsoft Store Developer CLI. Gated behind the
+#                "microsoft-store" environment so publishing stays a
+#                deliberate approval, not a side effect of tagging.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout (full history for branch policy check)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enforce release-branch policy
+        shell: pwsh
+        run: |
+          $branches = git branch -r --contains $env:GITHUB_SHA
+          if (-not ($branches -match 'origin/release/')) {
+            Write-Host "Containing branches:`n$branches"
+            Write-Error "Tag '${{ github.ref_name }}' points at a commit that is not on any release/* branch. Release flow: branch release/x.y.z from main, tag it vX.Y.Z, push branch + tag (docs/releasing.md)."
+            exit 1
+          }
+
+      - name: Derive MSIX version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if ($tag -notmatch '^v(\d+)\.(\d+)\.(\d+)$') {
+            Write-Error "Tag '$tag' must be vMAJOR.MINOR.PATCH (three parts — the Store requires the MSIX revision to be 0, so .0 is appended automatically)."
+            exit 1
+          }
+          $version = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "MSIX version: $version"
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build Store MSIX (unsigned — Microsoft re-signs on upload)
+        shell: pwsh
+        run: |
+          .\build-msix.ps1 -Store -SkipAssets -Version '${{ steps.version.outputs.version }}'
+          Rename-Item "WardLock_${{ steps.version.outputs.version }}.msix" "WardLock_${{ steps.version.outputs.version }}_store.msix"
+
+      # secrets aren't reliably usable in `if:` expressions, so surface
+      # presence via a step output instead.
+      - name: Detect sideload signing certificate
+        id: pfx
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.SIDELOAD_CERT_PFX_BASE64 }}
+        run: |
+          $has = -not [string]::IsNullOrEmpty($env:PFX_BASE64)
+          "has=$($has.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          if (-not $has) {
+            Write-Host "::notice::SIDELOAD_CERT_PFX_BASE64 secret not set — skipping the signed sideload package (docs/releasing.md → One-time setup)."
+          }
+
+      - name: Build signed sideload MSIX
+        if: steps.pfx.outputs.has == 'true'
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.SIDELOAD_CERT_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.SIDELOAD_CERT_PASSWORD }}
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'sideload.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_BASE64))
+          $securePw = ConvertTo-SecureString $env:PFX_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePw
+          Remove-Item $pfxPath
+          Write-Host "Signing as: $($cert.Subject)"
+
+          .\build-msix.ps1 -SkipCert -SkipAssets -CertSubject $cert.Subject -Version '${{ steps.version.outputs.version }}'
+          Rename-Item "WardLock_${{ steps.version.outputs.version }}.msix" "WardLock_${{ steps.version.outputs.version }}_sideload.msix"
+
+      - name: Build loose zip (for browser-extension users)
+        shell: pwsh
+        run: |
+          dotnet publish WardLock.csproj -c Release -r win-x64 --self-contained true -o bin\loose
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path bin\loose\* -DestinationPath "WardLock_${{ steps.version.outputs.version }}_win-x64.zip"
+
+      - name: Upload store package
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-msix
+          path: WardLock_${{ steps.version.outputs.version }}_store.msix
+          if-no-files-found: error
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: |
+            WardLock_*_sideload.msix
+            WardLock_*_win-x64.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: WardLock_*
+          body: |
+            > **Sideload:** install the `_sideload.msix` (requires trusting the signing certificate once).
+            > **Browser integration:** use the `_win-x64.zip` loose build — MSIX installs can't host the
+            > native-messaging bridge. The `_store.msix` is the unsigned Store submission package,
+            > attached for traceability.
+
+  store:
+    needs: [build, release]
+    runs-on: windows-latest
+    # Create this environment in Settings → Environments with required
+    # reviewers: tagging builds everything, but Store publishing waits for an
+    # explicit approval.
+    environment: microsoft-store
+    steps:
+      - name: Download store package
+        uses: actions/download-artifact@v4
+        with:
+          name: store-msix
+
+      - name: Check Partner Center secrets
+        shell: pwsh
+        env:
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
+        run: |
+          $required = 'AZURE_AD_TENANT_ID', 'SELLER_ID', 'AZURE_AD_APPLICATION_CLIENT_ID',
+                      'AZURE_AD_APPLICATION_SECRET', 'STORE_PRODUCT_ID'
+          $missing = $required | Where-Object { [string]::IsNullOrEmpty((Get-Item "env:$_" -ErrorAction SilentlyContinue).Value) }
+          if ($missing) {
+            Write-Error "Missing repository secrets: $($missing -join ', '). See docs/releasing.md → One-time setup."
+            exit 1
+          }
+
+      - name: Setup Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+
+      - name: Configure Partner Center credentials
+        shell: pwsh
+        run: |
+          msstore reconfigure `
+            --tenantId ${{ secrets.AZURE_AD_TENANT_ID }} `
+            --sellerId ${{ secrets.SELLER_ID }} `
+            --clientId ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }} `
+            --clientSecret ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+
+      - name: Publish to Microsoft Store
+        shell: pwsh
+        run: |
+          msstore publish "WardLock_${{ needs.build.outputs.version }}_store.msix" -id ${{ secrets.STORE_PRODUCT_ID }}
