@@ -307,6 +307,9 @@ public partial class MainViewModel : ObservableObject
             vm.Refresh();
         }
 
+        // Count down / expire a pending browser-fill approval
+        UpdateApprovalTick();
+
         // Check idle timeout for auto-lock
         CheckIdleTimeout();
     }

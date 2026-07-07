@@ -21,6 +21,12 @@ public class AuthAccount
     /// </summary>
     public string? Domain { get; set; }
 
+    /// <summary>
+    /// When true, browser fills for this account require the number-matched
+    /// out-of-band approval (2-digit challenge typed into the desktop app).
+    /// </summary>
+    public bool RequireApproval { get; set; }
+
     // ── Shared vault in-memory fields (never serialized) ──
 
     /// <summary>

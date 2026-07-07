@@ -88,3 +88,23 @@ body {
 .error {
   color: #f38ba8;
 }
+
+.account .approval {
+  font-size: 11px;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+.challenge {
+  padding: 6px 0;
+}
+
+.challenge-number {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 44px;
+  font-weight: 700;
+  color: #f9e2af;
+  text-align: center;
+  letter-spacing: 6px;
+  padding: 8px 0 2px;
+}

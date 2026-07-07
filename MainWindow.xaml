@@ -252,6 +252,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -560,8 +561,39 @@
                 </Border>
             </Popup>
 
+            <!-- Browser fill approval banner (issue #1 number-matched release) -->
+            <Border Grid.Row="2" x:Name="ApprovalBanner" Background="#2d2a3d" Padding="14,10"
+                    BorderBrush="#f9e2af" BorderThickness="0,0,0,2"
+                    Visibility="{Binding HasPendingApproval, Converter={StaticResource BoolToVis}}"
+                    IsVisibleChanged="OnApprovalBannerVisibleChanged">
+                <StackPanel>
+                    <DockPanel Margin="0,0,0,6">
+                        <TextBlock Text="&#128274;" FontSize="14" VerticalAlignment="Top" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding ApprovalPromptText}" FontSize="12"
+                                   Foreground="#f9e2af" TextWrapping="Wrap"/>
+                    </DockPanel>
+                    <DockPanel>
+                        <TextBox x:Name="ApprovalBox" DockPanel.Dock="Left"
+                                 Style="{StaticResource InputBox}"
+                                 Text="{Binding ApprovalInput, UpdateSourceTrigger=PropertyChanged}"
+                                 MaxLength="2" Width="52" FontSize="20" FontWeight="Bold"
+                                 FontFamily="Cascadia Mono, Consolas" TextAlignment="Center"/>
+                        <Button DockPanel.Dock="Right" Content="Deny" Style="{StaticResource SubtleButton}"
+                                Foreground="#f38ba8" VerticalAlignment="Center"
+                                Command="{Binding DenyFillApprovalCommand}"/>
+                        <TextBlock DockPanel.Dock="Right"
+                                   Text="{Binding ApprovalSecondsRemaining, StringFormat={}{0}s}"
+                                   FontSize="12" Foreground="#a6adc8"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock Text="{Binding ApprovalFeedback}" FontSize="11"
+                                   Foreground="#f38ba8" VerticalAlignment="Center"
+                                   Margin="10,0" TextWrapping="Wrap"/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Account List with Drag-and-Drop + Context Menu -->
-            <ListBox Grid.Row="2" ItemsSource="{Binding FilteredAccountsView}"
+            <ListBox Grid.Row="3" ItemsSource="{Binding FilteredAccountsView}"
                      Background="Transparent" BorderThickness="0"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      HorizontalContentAlignment="Stretch"
@@ -610,6 +642,23 @@
                                     <MenuItem Header="Set Fill Domain…" Click="OnContextSetDomain">
                                         <MenuItem.Icon>
                                             <TextBlock Text="&#127760;" FontSize="12"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Require Approval to Fill" Click="OnContextToggleApproval">
+                                        <MenuItem.Icon>
+                                            <TextBlock FontSize="12">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="&#128737;"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding RequireApproval}" Value="True">
+                                                                <Setter Property="Text" Value="&#10003;"/>
+                                                                <Setter Property="Foreground" Value="#a6e3a1"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
                                         </MenuItem.Icon>
                                     </MenuItem>
                                     <Separator Background="#45475a"/>
@@ -673,6 +722,9 @@
                                                    VerticalAlignment="Center"/>
                                         <TextBlock Text="{Binding DomainBadge}" FontSize="9"
                                                    Foreground="#74c7ec" Margin="6,0,0,0"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding ApprovalBadge}" FontSize="9"
+                                                   Foreground="#f9e2af" Margin="6,0,0,0"
                                                    VerticalAlignment="Center"/>
                                     </DockPanel>
                                     <!-- TOTP code: color varies by source (green=personal, mauve=vault) -->
@@ -755,7 +807,7 @@
             </ListBox>
 
             <!-- Empty state -->
-            <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <StackPanel Grid.Row="3" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <StackPanel.Style>
                     <Style TargetType="StackPanel">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -773,7 +825,7 @@
             </StackPanel>
 
             <!-- Add Panel -->
-            <Border Grid.Row="3" Background="#181825" Padding="12"
+            <Border Grid.Row="4" Background="#181825" Padding="12"
                     Visibility="{Binding IsAddPanelVisible, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
                     <TextBlock Text="Add Account" FontWeight="SemiBold" Margin="0,0,0,8"/>
@@ -819,7 +871,7 @@
             </Border>
 
             <!-- Status bar -->
-            <Border Grid.Row="4" Background="#181825" Padding="12,6">
+            <Border Grid.Row="5" Background="#181825" Padding="12,6">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Left"
                                Text="{Binding VaultIndicatorText}"

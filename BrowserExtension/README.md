@@ -22,6 +22,15 @@ On a login page, click the WardLock toolbar icon. Accounts whose fill domain
 matches the page are listed; click one and the code is filled into the OTP field
 (clipboard fallback if no field is found).
 
+### Number-matched approval
+
+Accounts flagged **Require Approval to Fill** in WardLock (and *all* accounts
+during the first 24 h after a browser profile first talks to WardLock) don't
+fill immediately. Instead the popup shows a 2-digit number; type that number
+into the WardLock window to release the code. The fill completes automatically
+once approved — even if the popup closed when WardLock took focus — and the
+approval is one-shot, expires after 60 s, and is denied after 3 wrong entries.
+
 ## Troubleshooting
 
 - **"WardLock is running as administrator…"** — the browser runs at medium
@@ -46,3 +55,10 @@ matches the page are listed; click one and the code is filled into the OTP field
   `allowed_origins` in the host manifest, and WardLock re-validates the calling
   origin on every connection.
 - **Accounts opt in:** accounts without a fill domain are invisible to the browser.
+- **Out-of-band approval:** for approval-required fills, the 2-digit number is
+  shown in the browser but typed into the WardLock window — a surface the page
+  and the extension don't control. A spoofed requester can't approve itself,
+  and there is no "Allow" button to click reflexively. The per-profile client
+  ID that scopes the 24 h probation is self-asserted, so treat it as UX
+  hardening; the domain check, lock state, and the out-of-band number entry are
+  the real security boundaries.

@@ -80,6 +80,7 @@ public partial class MainViewModel
         if (!IsUnlocked) return;
 
         _timer.Stop();
+        CancelPendingApproval();
         Accounts.Clear();
         SearchText = string.Empty;
         IsUnlocked = false;

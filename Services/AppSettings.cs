@@ -220,4 +220,52 @@ public static class AppSettings
         get { EnsureLoaded(); return _settings.TryGetValue("OAuthDisplayName", out var v) ? v : null; }
         set { EnsureLoaded(); if (value is null) _settings.Remove("OAuthDisplayName"); else _settings["OAuthDisplayName"] = value; Save(); }
     }
+
+    // ── Browser pairing probation (issue #1 number-matched approval) ──
+
+    /// <summary>New pairings force number-matched approval for this long.</summary>
+    public static readonly TimeSpan BrowserPairingProbation = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// First-seen time of a browser extension client (per-profile random ID),
+    /// registering it now if unseen. Stored as "id=utcO|id=utcO" pairs.
+    /// The ID is self-asserted by the extension, so this is a UX hardening
+    /// heuristic, not a cryptographic identity.
+    /// </summary>
+    public static DateTime RegisterBrowserClient(string clientId)
+    {
+        EnsureLoaded();
+        var pairings = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        if (_settings.TryGetValue("BrowserPairings", out var raw) && !string.IsNullOrEmpty(raw))
+        {
+            foreach (var pair in raw.Split('|', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var idx = pair.IndexOf('=');
+                if (idx > 0 && DateTime.TryParse(pair[(idx + 1)..], null,
+                        System.Globalization.DateTimeStyles.RoundtripKind, out var seen))
+                    pairings[pair[..idx]] = seen;
+            }
+        }
+
+        if (pairings.TryGetValue(clientId, out var firstSeen)) return firstSeen;
+
+        firstSeen = DateTime.UtcNow;
+        pairings[clientId] = firstSeen;
+        // Keep the most recent 20 pairings
+        var kept = pairings.OrderByDescending(p => p.Value).Take(20);
+        _settings["BrowserPairings"] = string.Join('|', kept.Select(p => $"{p.Key}={p.Value:o}"));
+        Save();
+        return firstSeen;
+    }
+
+    /// <summary>True while a browser client is inside the 24h forced-approval window.</summary>
+    public static bool IsBrowserClientInProbation(string? clientId)
+    {
+        // No usable ID → treat as a brand-new pairing (fail toward approval)
+        if (string.IsNullOrEmpty(clientId) || clientId.Length > 64 ||
+            !clientId.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
+            return true;
+
+        return DateTime.UtcNow - RegisterBrowserClient(clientId) < BrowserPairingProbation;
+    }
 }

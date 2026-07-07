@@ -156,6 +156,17 @@ public class SharedVaultService : IDisposable
         AuditLog.TryAppend(AuditAction.DomainChanged, DisplayName(account), domain ?? "(cleared)");
     }
 
+    /// <summary>Toggle the number-matched fill approval requirement on a vault account and persist.</summary>
+    public void UpdateAccountApproval(string id, bool requireApproval)
+    {
+        var account = Accounts.FirstOrDefault(a => a.Id == id);
+        if (account == null) return;
+        account.RequireApproval = requireApproval;
+        SaveToDisk();
+        AuditLog.TryAppend(AuditAction.ApprovalRequirementChanged, DisplayName(account),
+            requireApproval ? "required" : "not required");
+    }
+
     private static string DisplayName(AuthAccount a)
         => string.IsNullOrEmpty(a.Issuer) ? a.Label : $"{a.Issuer} ({a.Label})";
 

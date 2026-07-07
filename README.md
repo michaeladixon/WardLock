@@ -46,6 +46,7 @@ Since Authy abandoned the desktop, Windows-first 2FA users retype codes from the
 | 🎮 Steam Guard | `ONLINE` | Import migrated `otpauth://steam` secrets, native 5-char codes |
 | 📷 QR everything | `ONLINE` | Scan from screen, file, or clipboard; Google Auth migration |
 | 🔐 App lock | `ONLINE` | Windows Hello / password / Google / Microsoft / Facebook |
+| 🔢 Number-matched release | `ONLINE` | 2-digit out-of-band approval for browser fills — serverless MFA-fatigue armor |
 | 📡 Push-approved release | `BUILDING` | Number-matching approval for team vaults ([#3](https://github.com/michaeladixon/WardLock/issues/3)) |
 
 ## ⚡ One-Keystroke Code Delivery
@@ -71,6 +72,16 @@ flowchart LR
 ```
 
 **Setup:** menu (≡) → **Enable Browser Integration**, then load [`BrowserExtension/`](BrowserExtension/README.md) unpacked at `chrome://extensions`. Not compatible with MSIX-installed builds yet (browsers can't launch executables inside `WindowsApps`) — use a loose build.
+
+### Number-matched code release — MFA-fatigue armor, zero servers
+
+The anti-fatigue property of Microsoft Authenticator's number matching, rebuilt **entirely locally** on the native-messaging channel:
+
+- Flag an account (right-click → *Require Approval to Fill*) and every browser fill turns into a challenge: the extension popup shows a random **2-digit number**, and WardLock's own window asks you to type it.
+- The approval happens **out-of-band** — in the app window the requesting surface doesn't control. A spoofed page, a compromised extension, or a reflexive "Allow" click can never release a code; you have to *transcribe* the number you see in the browser.
+- One-shot and time-boxed: 60 s to type it, 3 wrong entries deny it, the released code can be picked up exactly once, and a locked vault cancels everything.
+- **Forced on for the first 24 h after a new browser pairing** — a freshly installed (or freshly impersonated) browser profile gets no silent fills, flag or no flag.
+- For team-vault accounts, requests, approvals, and denials all land in the hash-chained audit trail.
 
 ## 🔢 TOTP Engine
 
