@@ -18,6 +18,9 @@ public enum AuditAction
     CodeCopied,
     CodeAutoTyped,
     CodeFilledInBrowser,
+    ApprovalRequirementChanged,
+    FillApprovalRequested,
+    FillApprovalDenied,
 }
 
 /// <summary>One audit record. Serialized as a single JSON line in the sidecar log.</summary>

@@ -35,6 +35,16 @@ function request(msg) {
   });
 }
 
+// Random per-profile ID: lets the app force number-matched approval for the
+// first 24h after a new browser pairing. Self-asserted — hardening, not identity.
+async function getClientId() {
+  const stored = await chrome.storage.local.get("clientId");
+  if (stored.clientId) return stored.clientId;
+  const clientId = crypto.randomUUID();
+  await chrome.storage.local.set({ clientId });
+  return clientId;
+}
+
 const content = document.getElementById("content");
 const domainEl = document.getElementById("domain");
 
@@ -84,8 +94,13 @@ function fillCodeInPage(code) {
 }
 
 async function fill(tab, account, hostname) {
-  const res = await request({ action: "fill-code", id: account.id, domain: hostname });
+  const client = await getClientId();
+  const res = await request({ action: "fill-code", id: account.id, domain: hostname, client });
   if (!res.ok) {
+    if (res.error === "approval-required") {
+      showChallenge(tab, res);
+      return;
+    }
     show(`<div class="message error">${esc(friendlyError(res))}</div>`);
     return;
   }
@@ -114,6 +129,49 @@ async function fill(tab, account, hostname) {
       show(`<div class="message">Code: <b>${esc(res.code)}</b> (${esc(String(res.secondsRemaining))}s left)</div>`);
     }
   }
+}
+
+// Number-matched approval (issue #1): show the 2-digit number here, the user
+// types it into the WardLock window — out-of-band relative to this popup, so a
+// spoofed page or reflexive click can never release the code. The background
+// worker finishes the fill even if this popup closes when WardLock takes focus.
+function showChallenge(tab, res) {
+  show(
+    `<div class="challenge">
+       <div class="challenge-number">${esc(res.challenge)}</div>
+       <div class="message">WardLock is asking for approval.<span class="hint">Type this number into the WardLock window (${esc(String(res.expiresIn))}s). The code fills automatically once approved.</span></div>
+     </div>`
+  );
+
+  chrome.runtime.onMessage.addListener(function onUpdate(msg) {
+    if (msg?.type !== "approval-update" || msg.challengeId !== res.challengeId) return;
+    chrome.runtime.onMessage.removeListener(onUpdate);
+
+    switch (msg.status) {
+      case "approved":
+        if (msg.filled) {
+          show(`<div class="message filled">✓ Approved — code filled</div>`);
+          setTimeout(() => window.close(), 900);
+        } else {
+          show(`<div class="message">Approved, but no code field found. Code: <b>${esc(msg.code)}</b></div>`);
+        }
+        break;
+      case "denied":
+        show(`<div class="message error">WardLock denied this fill.</div>`);
+        break;
+      case "expired":
+        show(`<div class="message error">Approval timed out. Try again.</div>`);
+        break;
+      case "locked":
+        show(`<div class="message error">WardLock locked before the request was approved.</div>`);
+        break;
+      default:
+        show(`<div class="message error">Approval failed. Try again.</div>`);
+    }
+  });
+
+  // The background worker polls and fills — it outlives this popup
+  chrome.runtime.sendMessage({ type: "await-approval", challengeId: res.challengeId, tabId: tab.id });
 }
 
 function friendlyError(res) {
@@ -154,7 +212,7 @@ async function init() {
   }
   domainEl.textContent = hostname;
 
-  const res = await request({ action: "accounts", domain: hostname });
+  const res = await request({ action: "accounts", domain: hostname, client: await getClientId() });
   if (!res.ok) {
     show(`<div class="message error">${esc(friendlyError(res))}</div>`);
     return;
@@ -172,7 +230,8 @@ async function init() {
     const display = account.issuer
       ? `${account.issuer}${account.label ? " (" + account.label + ")" : ""}`
       : account.label;
-    btn.innerHTML = `<span class="name">${esc(display)}</span><span class="source">${esc(account.source)}</span>`;
+    const approvalHint = account.requiresApproval ? `<span class="approval" title="Requires approval in WardLock">🛡</span>` : "";
+    btn.innerHTML = `<span class="name">${esc(display)}</span>${approvalHint}<span class="source">${esc(account.source)}</span>`;
     btn.addEventListener("click", () => fill(tab, account, hostname));
     content.appendChild(btn);
   }

@@ -160,6 +160,19 @@ public partial class MainWindow : Window
             mainVm.SetAccountDomain(account, dlg.Value);
     }
 
+    private void OnContextToggleApproval(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.DataContext is not AccountViewModel account) return;
+        ((MainViewModel)DataContext).SetAccountApproval(account, !account.RequireApproval);
+    }
+
+    /// <summary>Focus the number box when a fill approval banner appears.</summary>
+    private void OnApprovalBannerVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true)
+            Dispatcher.BeginInvoke(() => ApprovalBox.Focus());
+    }
+
     private void OnContextMoveToVault(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuItem mi || mi.DataContext is not AccountViewModel account) return;

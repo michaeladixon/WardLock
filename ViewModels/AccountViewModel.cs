@@ -36,6 +36,17 @@ public partial class AccountViewModel : ObservableObject
         OnPropertyChanged(nameof(DomainBadge));
     }
 
+    /// <summary>Browser fills require the number-matched out-of-band approval.</summary>
+    public bool RequireApproval => _account.RequireApproval;
+    public string ApprovalBadge => RequireApproval ? "🛡 approval" : string.Empty;
+
+    /// <summary>Call after the underlying account's RequireApproval was changed and persisted.</summary>
+    public void NotifyApprovalChanged()
+    {
+        OnPropertyChanged(nameof(RequireApproval));
+        OnPropertyChanged(nameof(ApprovalBadge));
+    }
+
     /// <summary>
     /// Code color: mauve (#cba6f7) for shared vault accounts,
     /// green (#a6e3a1) for personal accounts.
