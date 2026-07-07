@@ -21,6 +21,7 @@ public enum AuditAction
     ApprovalRequirementChanged,
     FillApprovalRequested,
     FillApprovalDenied,
+    ViewerAccessChanged,
 }
 
 /// <summary>One audit record. Serialized as a single JSON line in the sidecar log.</summary>

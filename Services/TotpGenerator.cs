@@ -12,7 +12,16 @@ public static class TotpGenerator
     private const string SteamAlphabet = "23456789BCDFGHJKMNPQRTVWXY";
 
     public static string GenerateCode(AuthAccount account)
+        => GenerateCodeAt(account, DateTimeOffset.UtcNow);
+
+    public static string GenerateCodeAt(AuthAccount account, DateTimeOffset time)
     {
+        // Viewer-role vault accounts hold no seed — look the code up in the
+        // precomputed window. Empty when the window has lapsed (admin offline
+        // too long); delivery paths treat empty as code-unavailable.
+        if (account.CodeWindow != null)
+            return account.CodeWindow.CodeAt(time.ToUnixTimeSeconds(), account.Period) ?? string.Empty;
+
         // Shared vault accounts hold plaintext secret in memory;
         // personal accounts need DPAPI decryption. If decryption fails, return an empty code
         // to avoid crashing the UI refresh timer thread; the caller can surface an error.
@@ -29,7 +38,7 @@ public static class TotpGenerator
         var secretBytes = Base32Encoding.ToBytes(secret);
 
         if (account.Encoder == OtpEncoder.Steam)
-            return ComputeSteamCode(secretBytes, account.Period);
+            return ComputeSteamCode(secretBytes, account.Period, time.ToUnixTimeSeconds());
 
         var mode = account.Algorithm switch
         {
@@ -39,7 +48,7 @@ public static class TotpGenerator
         };
 
         var totp = new Totp(secretBytes, step: account.Period, mode: mode, totpSize: account.Digits);
-        return totp.ComputeTotp();
+        return totp.ComputeTotp(time.UtcDateTime);
     }
 
     /// <summary>
@@ -55,9 +64,9 @@ public static class TotpGenerator
     /// Steam Guard code: standard RFC 6238 HMAC-SHA1 truncation, but the 31-bit value
     /// is encoded as 5 characters over Steam's custom alphabet instead of decimal digits.
     /// </summary>
-    private static string ComputeSteamCode(byte[] secretBytes, int period)
+    private static string ComputeSteamCode(byte[] secretBytes, int period, long unixSeconds)
     {
-        var counter = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() / period);
+        var counter = (ulong)(unixSeconds / period);
         var counterBytes = new byte[8];
         System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(counterBytes, counter);
 

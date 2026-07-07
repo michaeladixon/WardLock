@@ -42,6 +42,7 @@ Since Authy abandoned the desktop, Windows-first 2FA users retype codes from the
 | ⚡ Global auto-type | `ONLINE` | `Ctrl+Shift+T` types the current code into any focused field |
 | 🌐 Browser fill | `ONLINE` | MV3 extension, domain-verified, 100% local native messaging |
 | 🔗 Shared team vaults | `ONLINE` | Encrypted vault file on any share; codes generate locally |
+| 👁 Viewer role | `ONLINE` | Two-key wrapping: viewers get codes, never seeds |
 | 📜 Vault audit trail | `ONLINE` | Hash-chained, tamper-evident, CSV export |
 | 🎮 Steam Guard | `ONLINE` | Import migrated `otpauth://steam` secrets, native 5-char codes |
 | 📷 QR everything | `ONLINE` | Scan from screen, file, or clipboard; Google Auth migration |
@@ -98,6 +99,23 @@ The capability the team-2FA SaaS products charge for, delivered as a file: creat
 - `FileSystemWatcher` syncs teammate changes live; file locking prevents write corruption
 - Per-account source badges; "Add to" dropdown routes new accounts to any open vault
 - Move accounts between Personal ⇄ vault with automatic re-encryption
+
+### 👁 Viewer role — codes without the keys to the kingdom
+
+Give teammates a **viewer password** (👁 next to an open vault) and they get
+current codes — copy, auto-type, browser fill, the works — while the seeds
+never enter their process. Not a UI flag: two-key wrapping. Admin and viewer
+passwords unwrap different keys, and the viewer's key decrypts only metadata
+plus **precomputed code windows** (72 h ahead, refreshed whenever an admin's
+client touches the vault). A viewer's client *cannot* export a seed, mint a
+valid vault write, or outlive a password rotation — the crypto, not the
+goodwill, enforces it. Full rationale and honest limits: [`docs/viewer-role.md`](docs/viewer-role.md).
+
+There is one honest tradeoff, and you should know it before relying on the
+role: TOTP without a server means viewers hold *windows* of future codes, so
+if no admin opens the vault within the horizon, viewers see `code expired`
+until one does. That staleness is the price of "no seed on the viewer's
+machine" with no cloud in the loop.
 
 ### 📜 Audit Trail — tamper-evident, serverless
 

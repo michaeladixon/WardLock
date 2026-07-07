@@ -34,4 +34,6 @@ public class ExportAccount
     public int SortOrder { get; set; }
     /// <summary>Registrable domain for browser fill. Older exports omit this.</summary>
     public string? Domain { get; set; }
+    /// <summary>Browser fills need number-matched approval. Older exports omit this.</summary>
+    public bool RequireApproval { get; set; }
 }
