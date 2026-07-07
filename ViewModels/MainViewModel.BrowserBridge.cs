@@ -131,6 +131,8 @@ public partial class MainViewModel
                     return new { ok = false, error = "code-unavailable" };
 
                 ResetIdleTimer();
+                LogVaultCodeAccess(account, AuditAction.CodeFilledInBrowser,
+                    DomainMatcher.Normalize(domain) ?? string.Empty);
                 StatusMessage = $"Filled {account.DisplayName} in browser ({DomainMatcher.Normalize(domain)}).";
                 return new
                 {

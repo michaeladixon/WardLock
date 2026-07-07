@@ -504,6 +504,13 @@
                                                 Command="{Binding DataContext.CloseSharedVaultCommand,
                                                     RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}"/>
+                                        <Button DockPanel.Dock="Right" Content="&#128220;" FontSize="10"
+                                                ToolTip="View audit log"
+                                                Background="Transparent" BorderThickness="0"
+                                                Cursor="Hand" Padding="4,4"
+                                                Command="{Binding DataContext.ShowAuditLogCommand,
+                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"/>
                                         <TextBlock Text="{Binding StringFormat='&#128279;  {0}'}"
                                                    FontSize="11" Foreground="#a6e3a1"
                                                    VerticalAlignment="Center" Margin="14,0,0,0"/>

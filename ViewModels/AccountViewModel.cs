@@ -83,10 +83,15 @@ public partial class AccountViewModel : ObservableObject
     /// <summary>Shows "Copied!" during the copy feedback window, otherwise the formatted code.</summary>
     public string DisplayCode => JustCopied ? "Copied!" : FormattedCode;
 
+    /// <summary>Raised when a shared-vault account's code is copied, for the audit trail.</summary>
+    public static event Action<AccountViewModel>? SharedCodeCopied;
+
     [RelayCommand]
     private async Task CopyToClipboard()
     {
         System.Windows.Clipboard.SetText(CurrentCode);
+        if (IsShared)
+            SharedCodeCopied?.Invoke(this);
         JustCopied = true;
         await Task.Delay(1500);
         JustCopied = false;

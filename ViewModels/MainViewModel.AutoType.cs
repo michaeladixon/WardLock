@@ -82,9 +82,16 @@ public partial class MainViewModel
             return;
         }
 
-        StatusMessage = AutoTypeService.TypeText(target, code)
-            ? $"Typed code for {account.DisplayName}."
-            : "Target window lost focus. Code was not typed.";
+        if (AutoTypeService.TypeText(target, code))
+        {
+            LogVaultCodeAccess(account, AuditAction.CodeAutoTyped,
+                AutoTypeService.GetWindowTitle(target));
+            StatusMessage = $"Typed code for {account.DisplayName}.";
+        }
+        else
+        {
+            StatusMessage = "Target window lost focus. Code was not typed.";
+        }
     }
 
     /// <summary>
