@@ -363,3 +363,6 @@ FodyWeavers.xsd
 *.pfx
 /WardLock_1.0.0.0.msix
 /.claude/settings.local.json
+
+# Local codebase-index MCP server data
+.codebase-index/

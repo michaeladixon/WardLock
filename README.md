@@ -1,194 +1,240 @@
-# WardLock — Windows TOTP Authenticator
-
-A lightweight Windows desktop 2FA authenticator built with WPF and .NET 10.
-
-## Quick Start
+<div align="center">
 
 ```
-dotnet restore
-dotnet run
+██╗    ██╗ █████╗ ██████╗ ██████╗ ██╗      ██████╗  ██████╗██╗  ██╗
+██║    ██║██╔══██╗██╔══██╗██╔══██╗██║     ██╔═══██╗██╔════╝██║ ██╔╝
+██║ █╗ ██║███████║██████╔╝██║  ██║██║     ██║   ██║██║     █████╔╝
+██║███╗██║██╔══██║██╔══██╗██║  ██║██║     ██║   ██║██║     ██╔═██╗
+╚███╔███╔╝██╔══██║██║  ██║██████╔╝███████╗╚██████╔╝╚██████╗██║  ██╗
+ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝
 ```
 
-## Features
+### `⟨ YOUR CODES ⟩ ⟨ YOUR MACHINE ⟩ ⟨ NO CLOUD ⟩`
 
-### TOTP Code Generation
-Supports 6/8-digit codes, SHA1/SHA256/SHA512 algorithms, and configurable time periods. Codes refresh live with a countdown timer. Click any entry to copy the code to clipboard.
+**The Windows authenticator that types the code for you — and only on the real site.**
 
-Steam Guard entries migrated from other authenticators are supported: URIs using `otpauth://steam/...` (Aegis exports) or `encoder=steam` (KeePassXC exports) import directly and render Steam's 5-character codes. Note that Steam offers no official way to obtain your shared secret — WardLock can only import one you already have from another app's export.
+[![Windows](https://img.shields.io/badge/Windows_10%2F11-native-89b4fa?style=for-the-badge&logo=windows&logoColor=1e1e2e&labelColor=1e1e2e)](#building-from-source)
+[![.NET](https://img.shields.io/badge/.NET_10-WPF-cba6f7?style=for-the-badge&logo=dotnet&logoColor=1e1e2e&labelColor=1e1e2e)](#building-from-source)
+[![Local](https://img.shields.io/badge/100%25_LOCAL-no_telemetry-a6e3a1?style=for-the-badge&labelColor=1e1e2e)](PRIVACY.md)
+[![TOTP](https://img.shields.io/badge/TOTP-RFC_6238-f9e2af?style=for-the-badge&labelColor=1e1e2e)](#-totp-engine)
+[![Teams](https://img.shields.io/badge/TEAM_VAULTS-audit_trailed-f38ba8?style=for-the-badge&labelColor=1e1e2e)](#-shared-team-vaults)
 
-### QR Code Scanning
-Three scan modes available from the menu:
-- **Screen scan** — captures your full desktop and finds the QR code automatically. If it can't find one, falls back to a region selector overlay where you draw a box around the QR code.
-- **File scan** — open any PNG/JPG/BMP image containing a QR code.
-- **Clipboard scan** — if you've screenshot a QR code to your clipboard, scan it directly.
+</div>
 
-### Google Authenticator Migration
-Import accounts directly from Google Authenticator's "Export accounts" QR codes. Scan the migration QR code using any of the three scan modes above.
+---
 
-### Encrypted Backup / Restore
-Backup your accounts to a `.wardlock` file encrypted with AES-256-GCM (PBKDF2-SHA256 key derivation, 600k iterations). Password-protected with confirmation. Import restores accounts and re-encrypts secrets under your local DPAPI profile.
+```
+┌────────────────────────────────────────────────────────────────┐
+│ > initiating one-keystroke code delivery ...                   │
+│ > CTRL+SHIFT+T ........ code typed into focused field   [ OK ] │
+│ > browser fill ........ domain verified: github.com     [ OK ] │
+│ > lookalike blocked ... github.com.evil.com           [DENIED] │
+│ > vault audit chain ... 1,337 entries, SHA-256 chain    [ OK ] │
+└────────────────────────────────────────────────────────────────┘
+```
 
-### Shared Team Vaults
-For team-shared service accounts that need 2FA. Create a `.wardlock` vault file, put it on a network share / OneDrive / SharePoint, and share the password with your team via a secure channel. Each team member opens the vault locally — codes generate locally, secrets never transit the network in plaintext.
+Since Authy abandoned the desktop, Windows-first 2FA users retype codes from their phones like it's 2011. WardLock ends that: a lightweight WPF authenticator where the current code is always **one keystroke away** — globally hotkeyed, auto-typed, or filled in the browser with phishing-resistant domain verification. Everything runs on your machine. Nothing phones home.
 
-**How it works:**
-- Vault files use the same AES-256-GCM encryption as backups
-- Secrets are decrypted into memory on open, never written to DPAPI (so they're not bound to one user's Windows profile)
-- A FileSystemWatcher detects when a teammate adds/removes accounts — your view auto-refreshes
-- File-level locking prevents concurrent write corruption
-- Each account shows a source badge (Personal or vault-name) so you always know where a code comes from
-- The "Add to" dropdown lets you route new accounts to any open vault
+## ▰▰ Feature Grid ▰▰
 
-**Team workflow:**
-1. One person creates the vault: Menu → Create Shared Vault
-2. Share the `.wardlock` file via OneDrive / SharePoint / network share
-3. Share the vault password via a secure channel (not the same share)
-4. Each team member: Menu → Open Shared Vault → enter password
-5. Anyone can add/remove accounts — changes propagate to all users automatically
+| Capability | Status | The short version |
+|---|---|---|
+| ⚡ Global auto-type | `ONLINE` | `Ctrl+Shift+T` types the current code into any focused field |
+| 🌐 Browser fill | `ONLINE` | MV3 extension, domain-verified, 100% local native messaging |
+| 🔗 Shared team vaults | `ONLINE` | Encrypted vault file on any share; codes generate locally |
+| 📜 Vault audit trail | `ONLINE` | Hash-chained, tamper-evident, CSV export |
+| 🎮 Steam Guard | `ONLINE` | Import migrated `otpauth://steam` secrets, native 5-char codes |
+| 📷 QR everything | `ONLINE` | Scan from screen, file, or clipboard; Google Auth migration |
+| 🔐 App lock | `ONLINE` | Windows Hello / password / Google / Microsoft / Facebook |
+| 📡 Push-approved release | `BUILDING` | Number-matching approval for team vaults ([#3](https://github.com/michaeladixon/WardLock/issues/3)) |
 
-### Vault Audit Trail
-Every shared vault keeps a tamper-evident audit log in a sidecar file next to the vault (`team-vault.wardlock.log`): vault created/opened, account added/removed, fill-domain changes, and every code access (copy, hotkey auto-type, browser fill) — stamped with the acting member's Windows username and UTC time. Entries are hash-chained (each record embeds the previous record's SHA-256), so any edit, deletion, or reordering breaks the chain and is flagged with a tamper warning — no server needed. View it from the menu (📜 next to each open vault) and export to CSV for compliance.
+## ⚡ One-Keystroke Code Delivery
 
-**Threat model — read this before relying on it:** the log is written by cooperating WardLock clients. The hash chain makes silent *modification* of history evident; it does not make the log unforgeable. A member with write access to the share can delete the log wholesale or truncate its tail (truncation is only evident against an expected entry count or a retained copy — for compliance, export CSV snapshots periodically). Identity comes from the Windows username, which a hostile member controls on their own machine. In short: it's an honest-participant accountability trail, comparable to what team-2FA SaaS products offer, not a cryptographic guarantee against a malicious insider.
+### Global auto-type — `Ctrl+Shift+T`
 
-### System Tray Mode
-Minimizing or closing the window sends WardLock to the system tray. Double-click the tray icon or use the global hotkey to restore. Right-click the tray icon for Show/Exit.
+Press it anywhere, even with WardLock in the tray. WardLock reads the focused window's title, matches it to an account (a browser tab titled *"Sign in to GitHub"* matches your GitHub entry), and types the current code via `SendInput` — keyboard-layout independent, Steam codes included. Ambiguous match? A filterable picker materializes at your cursor. Locked vault? **Nothing gets typed, ever** — the lock screen surfaces instead.
 
-### Global Hotkeys
-**Ctrl+Shift+A** toggles WardLock visibility from anywhere, even when minimized to tray.
+### Browser fill — domain-verified, phishing-resistant
 
-**Ctrl+Shift+T** types the current code into the focused field — no copy/paste, no phone. WardLock matches the account from the focused window's title (e.g. a browser tab titled "Sign in to GitHub" matches your GitHub account); if the match is ambiguous, a small picker appears at the cursor. Codes are never typed while the vault is locked.
+A Chrome/Edge (MV3) extension delivers codes with one click — **and only on the real site**:
 
-### Browser Extension (domain-verified fill)
-A Chrome/Edge extension delivers codes with one click — and **only on the real site**. Each account can store a fill domain (right-click → Set Fill Domain); the extension only offers and fills a code when the page's hostname equals that domain or is a subdomain of it, matched at label boundaries so `github.com.evil.com` can never receive your GitHub code. Communication is 100% local via native messaging (WardLock.exe doubles as the host process, relaying to the running app over a per-user named pipe). The app validates the calling extension's origin on every connection and refuses all requests while locked.
+- Each account stores a **fill domain** (right-click → *Set Fill Domain…*, e.g. `github.com`).
+- The extension only offers a code when the page's hostname equals that domain or is a subdomain of it — matched at **label boundaries**, never substring. `github.com.evil.com` and `evilgithub.com` can never receive your GitHub code.
+- Communication is 100% local: `WardLock.exe` doubles as the native-messaging host, relaying browser requests over a per-user named pipe to the running app. No cloud. No phone. No account.
+- The app validates the calling extension's identity on every connection and refuses all requests while locked. Accounts without a fill domain are invisible to the browser.
 
-Setup: menu (≡) → **Enable Browser Integration**, then load the [`BrowserExtension`](BrowserExtension/README.md) folder unpacked in `chrome://extensions`. Not compatible with MSIX-installed builds yet (the browser can't launch executables inside `WindowsApps`) — use a loose build for browser integration.
+```mermaid
+flowchart LR
+    EXT["🧩 extension popup"] -- "stdio frames" --> PROXY["WardLock.exe<br/>(headless proxy)"]
+    PROXY -- "named pipe<br/>CurrentUserOnly" --> APP["🔒 WardLock app<br/>lock state · domain check"]
+    APP -. "code (verified domain only)" .-> EXT
+```
 
-### Drag-and-Drop Reordering
-Grab the ≡ handle on any account entry and drag it to reorder. Sort order persists across sessions.
+**Setup:** menu (≡) → **Enable Browser Integration**, then load [`BrowserExtension/`](BrowserExtension/README.md) unpacked at `chrome://extensions`. Not compatible with MSIX-installed builds yet (browsers can't launch executables inside `WindowsApps`) — use a loose build.
 
-### Windows Hello Lock
-Enable from the menu to require fingerprint/face/PIN verification before WardLock shows your codes. Falls back gracefully if Windows Hello is not available on your hardware.
+## 🔢 TOTP Engine
 
-## How to Add Accounts
+6/8-digit codes, SHA-1/SHA-256/SHA-512, configurable periods, live countdown, click-to-copy. Codes render green (personal) or mauve (vault) so you always know a secret's blast radius.
 
-**Option 1 — QR code scan** (recommended)
-Open the menu (≡) and choose a scan method. Most services show a QR code during 2FA setup.
+**Steam Guard:** URIs using `otpauth://steam/...` (Aegis exports) or `encoder=steam` (KeePassXC exports) import directly and render Steam's 5-character alphabet. Steam offers no official way to extract your shared secret — WardLock imports one you already liberated via another app's export.
 
-**Option 2 — otpauth:// URI**
-Paste the full `otpauth://totp/...` URI from a "Can't scan?" link.
+## 🔗 Shared Team Vaults
 
-**Option 3 — Manual entry**
-Enter the issuer, label, and Base32 secret key.
+The capability the team-2FA SaaS products charge for, delivered as a file: create a `.wardlock` vault, drop it on a network share / OneDrive / SharePoint, share the password out-of-band. Every member's codes generate locally — secrets never transit the network in plaintext.
 
-**Option 4 — Google Authenticator migration**
-In Google Authenticator: Transfer accounts → Export accounts → scan the displayed QR code with WardLock.
+- AES-256-GCM encryption (PBKDF2-SHA256, 600k iterations), same format as backups
+- Vault secrets live in memory only — never written to any user's DPAPI profile
+- `FileSystemWatcher` syncs teammate changes live; file locking prevents write corruption
+- Per-account source badges; "Add to" dropdown routes new accounts to any open vault
+- Move accounts between Personal ⇄ vault with automatic re-encryption
 
-## How It Works
+### 📜 Audit Trail — tamper-evident, serverless
 
-- **TOTP codes** generated via [Otp.NET](https://github.com/kspearrin/Otp.NET) (RFC 6238)
-- **Secrets encrypted at rest** using Windows DPAPI (user-scoped) — bound to your Windows login
-- **Backups/vaults encrypted** with AES-256-GCM + PBKDF2-SHA256 key derivation (600k iterations)
-- **Storage** at `%LOCALAPPDATA%\WardLock\accounts.json`
-- **Settings** at `%LOCALAPPDATA%\WardLock\settings.json`
-- **System tray** via [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon)
-- **Global hotkey** via Win32 RegisterHotKey interop
-- **Browser fill** via Chrome native messaging (stdio proxy → named pipe, `CurrentUserOnly`)
-- **QR scanning** via [ZXing.NET](https://github.com/micjahn/ZXing.Net) + GDI+ screen capture
-- **Windows Hello** via WinRT UserConsentVerifier interop
+Every vault keeps an append-only sidecar log (`team-vault.wardlock.log`): vault created/opened, accounts added/removed, fill-domain changes, and **every code access** — clipboard copy, hotkey auto-type (with target window title), browser fill (with requesting domain) — stamped with the member's Windows username and UTC time.
 
-## Building from Source
+Each record embeds the previous record's SHA-256. Edit, delete, or reorder anything and the chain breaks — flagged with a tamper warning in the viewer (📜 next to each open vault). Export to CSV for compliance.
 
-### Requirements
-- Windows 10 Build 19041+ (for Windows Hello WinRT interop)
-- .NET 10 SDK
+> **Threat model — read before relying on it:** the chain makes silent *modification* of history evident; it does not make the log unforgeable. A member with write access can delete the log wholesale or truncate its tail (evident only against retained CSV snapshots), and identity comes from the Windows username. It's an honest-participant accountability trail — the same guarantee level the paid SaaS products offer — not a cryptographic seal against a malicious insider.
 
-### Run locally
+## 🔐 App Lock
+
+| Method | Backing |
+|---|---|
+| Windows Hello | Fingerprint / face / PIN via WinRT `UserConsentVerifier` |
+| Password | PBKDF2-SHA256 hash, never stored in plaintext |
+| Google / Microsoft / Facebook | OAuth in your default browser; unlock bound to your `sub` claim |
+| None | Straight to codes (default) |
+
+Auto-lock after idle (default 5 minutes, configurable). A locked vault serves **nothing**: no window, no auto-type, no browser fill.
+
+## 📷 Getting Accounts In
+
+1. **QR scan** — full-screen auto-detect with a draw-a-box fallback, image files, or clipboard screenshots
+2. **Google Authenticator migration** — scan the *Export accounts* QR straight in
+3. **`otpauth://` URI** — paste from any "can't scan?" link
+4. **Manual** — issuer, label, Base32 secret, optional fill domain
+5. **Encrypted backup import** — restore a `.wardlock` backup; secrets re-encrypt under your local DPAPI
+
+Backups export the same way: AES-256-GCM, password-protected, one file.
+
+## ◢ How It Works ◤
+
+- **TOTP** via [Otp.NET](https://github.com/kspearrin/Otp.NET) (RFC 6238)
+- **Secrets at rest** → Windows DPAPI, user-scoped, bound to your login
+- **Backups / vaults** → AES-256-GCM + PBKDF2-SHA256 (600k iterations)
+- **Global hotkeys** → Win32 `RegisterHotKey`; typing via `SendInput` (`KEYEVENTF_UNICODE`)
+- **Browser bridge** → Chrome native messaging (stdio) → named pipe (`CurrentUserOnly`)
+- **Audit chain** → SHA-256 hash-linked JSON lines, exclusive-lock appends
+- **QR** → [ZXing.NET](https://github.com/micjahn/ZXing.Net) + GDI+ screen capture
+- **Tray** → [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon)
+- **Storage** → `%LOCALAPPDATA%\WardLock\` (`accounts.json`, `settings.json`)
+
+Privacy statement: [PRIVACY.md](PRIVACY.md) — the short version is *there is nothing to disclose because nothing leaves your machine*.
+
+## ⌨ Keyboard Shortcuts
+
+| Keys | Action |
+|---|---|
+| `Ctrl+Shift+T` | **Auto-type current code into focused field** (global) |
+| `Ctrl+Shift+A` | Show / hide WardLock (global) |
+| `Ctrl+F` | Search accounts |
+| `Click entry` | Copy code to clipboard |
+| `Esc` | Cancel search / picker / QR region selector |
+
+## 🛠 Building from Source
+
+**Requirements:** Windows 10 build 19041+, .NET 10 SDK
+
 ```
 dotnet restore
 dotnet build -c Release -r win-x64
 dotnet run
 ```
 
-### Build the MSIX installer (sideload)
+### MSIX installer (sideload)
+
 ```powershell
 .\build-msix.ps1
 ```
-This handles everything: creates a self-signed cert, generates visual assets, publishes the app, assembles the MSIX with `MakeAppx.exe`, and signs it with `SignTool.exe`. On first run it installs the cert to `TrustedPeople` (requires an elevated prompt, or run without elevation and sideload manually).
 
-Install the output:
+Handles everything: self-signed cert, visual assets, publish, `MakeAppx.exe`, `SignTool.exe`. First run installs the cert to `TrustedPeople` (elevated prompt, or sideload manually). Then:
+
 ```powershell
 Add-AppxPackage -Path .\WardLock_1.0.0.0.msix
 ```
 
-Common flags:
 | Flag | Purpose |
 |---|---|
 | `-Version "1.2.0.0"` | Set the package version |
-| `-SkipCert` | Reuse an existing cert instead of creating one |
-| `-SkipAssets` | Skip icon generation if `Images\` is already populated |
-| `-RunWack` | Run the Windows App Certification Kit after build |
+| `-SkipCert` | Reuse an existing cert |
+| `-SkipAssets` | Skip icon generation |
+| `-RunWack` | Run Windows App Certification Kit after build |
+| `-Store` | Partner Center identity, unsigned (Store re-signs) |
 
-**Requirements:** Windows 10/11 SDK (for `MakeAppx.exe` and `SignTool.exe`)
+**Store submission:** `.\build-msix.ps1 -Store -Version "1.0.0.0"` → upload to Partner Center.
 
-### Build for Microsoft Store submission
-```powershell
-.\build-msix.ps1 -Store -Version "1.0.0.0"
-```
-Stamps the Partner Center identity into the manifest and skips local signing (the Store re-signs on upload). Upload the resulting `.msix` to Partner Center → Your App → Packages.
+*Requires the Windows 10/11 SDK for `MakeAppx.exe` / `SignTool.exe`.*
 
-## Project Structure
+## 🗂 Project Structure
 
 ```
 WardLock/
 ├── Behaviors/
-│   └── DragDropReorder.cs          # ListBox drag-and-drop reordering
-├── BrowserExtension/               # MV3 Chrome/Edge extension (load unpacked)
+│   └── DragDropReorder.cs            # ListBox drag-and-drop reordering
+├── BrowserExtension/                 # MV3 Chrome/Edge extension (load unpacked)
 ├── Models/
-│   ├── AuthAccount.cs              # Account data model (personal + shared vault)
-│   └── ExportPayload.cs            # Encrypted backup/vault format
+│   ├── AuthAccount.cs                # Account model (+ fill domain, Steam encoder)
+│   └── ExportPayload.cs              # Encrypted backup/vault format
 ├── Services/
-│   ├── AccountStore.cs             # JSON persistence + URI parsing + reorder
-│   ├── AppSettings.cs              # Settings persistence + recent vault paths
-│   ├── AutoTypeService.cs          # Foreground-window detection + SendInput typing
-│   ├── BrowserBridge/              # Native messaging: framing, proxy, pipe server, installer
-│   ├── DomainMatcher.cs            # Label-anchored registrable-domain matching
-│   ├── ExportImportService.cs      # AES-256-GCM export/import
-│   ├── GlobalHotkeyService.cs      # Win32 hotkey registration
-│   ├── GoogleAuthMigrationDecoder.cs # Google Authenticator migration QR import
-│   ├── OAuthService.cs             # OAuth/authorization flows
-│   ├── PasswordLockService.cs      # Windows Hello lock orchestration
-│   ├── QrScanner.cs                # Screen/file/clipboard QR code scanning
-│   ├── SecretVault.cs              # DPAPI encryption wrapper
-│   ├── SharedVaultService.cs       # Shared team vault (open/create/watch/edit)
-│   ├── TotpGenerator.cs            # TOTP code generation
-│   ├── VaultAuditLog.cs            # Hash-chained tamper-evident vault audit trail
-│   ├── VaultPasswordCache.cs       # In-memory vault password caching
-│   └── WindowsHelloService.cs      # Biometric authentication via WinRT
+│   ├── AccountStore.cs               # JSON persistence + otpauth:// parsing
+│   ├── AppSettings.cs                # Settings + remembered vaults
+│   ├── AutoTypeService.cs            # Foreground detection + SendInput typing
+│   ├── BrowserBridge/                # Native messaging: framing, proxy, server, installer
+│   ├── DomainMatcher.cs              # Label-anchored registrable-domain matching
+│   ├── ExportImportService.cs        # AES-256-GCM export/import
+│   ├── GlobalHotkeyService.cs        # Win32 hotkey registration
+│   ├── GoogleAuthMigrationDecoder.cs # Google Authenticator migration QR
+│   ├── OAuthService.cs               # OAuth unlock flows
+│   ├── PasswordLockService.cs        # PBKDF2 app-lock password
+│   ├── QrScanner.cs                  # Screen/file/clipboard QR decoding
+│   ├── SecretVault.cs                # DPAPI wrapper
+│   ├── SharedVaultService.cs         # Team vaults: open/create/watch/edit
+│   ├── TotpGenerator.cs              # RFC 6238 + Steam encoding
+│   ├── VaultAuditLog.cs              # Hash-chained tamper-evident audit trail
+│   ├── VaultPasswordCache.cs         # DPAPI-cached vault passwords
+│   └── WindowsHelloService.cs        # WinRT biometric verification
 ├── ViewModels/
-│   ├── AccountViewModel.cs         # Per-account display logic + source badge
-│   ├── MainViewModel.cs            # App orchestration + vault management
-│   ├── MainViewModel.AutoType.cs   # Window-title matching + auto-type flow
-│   ├── MainViewModel.BrowserBridge.cs # Extension request handling + fill domains
-│   ├── MainViewModel.Search.cs     # Search/filter logic
-│   └── Services/
-│       ├── QrCoordinator.cs        # QR scan coordination
-│       └── SharedVaultCoordinator.cs # Shared vault coordination
+│   ├── AccountViewModel.cs           # Per-account display + copy + badges
+│   ├── MainViewModel.cs              # Orchestration + vaults + lock methods
+│   ├── MainViewModel.AutoType.cs     # Window-title matching + auto-type flow
+│   ├── MainViewModel.BrowserBridge.cs# Extension requests + fill domains
+│   ├── MainViewModel.Search.cs       # Filtering + idle auto-lock
+│   └── Services/                     # QR + shared-vault coordinators
 ├── Views/
-│   ├── AuditLogWindow.xaml/.cs     # Vault audit trail viewer + CSV export
-│   ├── AutoTypePickerWindow.xaml/.cs # Account picker popup for auto-type
-│   ├── PasswordDialog.xaml/.cs     # Export/import/vault password entry
-│   └── ScreenCaptureOverlay.xaml/.cs # Region selection overlay for QR scan
-├── MainWindow.xaml/.cs             # Main UI + tray + hotkey lifecycle
-├── App.xaml/.cs
-└── WardLock.csproj
+│   ├── AuditLogWindow.xaml/.cs       # Audit viewer + CSV export
+│   ├── AutoTypePickerWindow.xaml/.cs # Cursor-anchored account picker
+│   ├── InputDialog.xaml/.cs          # Fill-domain prompt
+│   ├── PasswordDialog.xaml/.cs       # Vault/backup password entry
+│   └── ScreenCaptureOverlay.xaml/.cs # QR region selector
+├── MainWindow.xaml/.cs               # Main UI + tray + hotkey lifecycle
+└── App.xaml/.cs                      # Startup + native-messaging proxy mode
 ```
 
-## Keyboard Shortcuts
+## 🗺 Roadmap
 
-| Shortcut | Action |
+| Trace | Target |
 |---|---|
-| Ctrl+Shift+A | Show/hide WardLock (global) |
-| Ctrl+Shift+T | Auto-type current code into focused field (global) |
-| Click entry | Copy code to clipboard |
-| Esc (in region selector) | Cancel QR scan |
+| [#1](https://github.com/michaeladixon/WardLock/issues/1) | ~~Auto-type~~ ✓ · ~~Browser fill~~ ✓ · local number-matched release · Firefox port |
+| [#3](https://github.com/michaeladixon/WardLock/issues/3) | ~~Audit trail~~ ✓ · viewer roles · WNS push-approved code release with number matching |
+| [#4](https://github.com/michaeladixon/WardLock/issues/4) | WardLock as an Entra ID External Authentication Method *(strategic, parked)* |
+| [#5](https://github.com/michaeladixon/WardLock/issues/5) | Subscription/entitlement rail on `api.wardlock.app` — personal TOTP stays free forever |
+
+<div align="center">
+
+```
+─────────────────────────────────────────────
+ ⟨ wardlock ⟩ — locally yours. © WardLock 2026
+─────────────────────────────────────────────
+```
+
+</div>
