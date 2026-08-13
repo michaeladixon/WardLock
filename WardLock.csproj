@@ -17,8 +17,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/michaeladixon/WardLock</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <SignAssembly>True</SignAssembly>
-    <AssemblyOriginatorKeyFile>WardLock.snk</AssemblyOriginatorKeyFile>
     <DefaultLanguage>en</DefaultLanguage>
   </PropertyGroup>
 

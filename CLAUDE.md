@@ -67,6 +67,6 @@ Under `%LOCALAPPDATA%\WardLock\`: `accounts.json` (DPAPI-encrypted secrets), `se
 ## Project specifics
 
 - Target framework `net10.0-windows10.0.19041.0`, `WinExe`, nullable + implicit usings enabled.
-- Assembly is strong-name signed (`WardLock.snk`, `SignAssembly=True`).
+- Assemblies are **not** strong-name signed. Strong-naming was removed (the `WardLock.snk` private key was never committed, and nothing consumes the assembly as a library). Package trust comes from the MSIX signature instead — a sideload Authenticode cert (`SIDELOAD_CERT_PFX_BASE64` secret) or Microsoft's re-signing for Store submissions.
 - `RuntimeIdentifiers` is `win-x64`; there is also a `Release|x86` platform config.
 - Packages: `Otp.NET`, `CommunityToolkit.Mvvm`, `ZXing.Net.Bindings.Windows.Compatibility`, `Hardcodet.NotifyIcon.Wpf`.
