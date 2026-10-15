@@ -527,6 +527,7 @@ public partial class MainViewModel : ObservableObject
         };
 
         if (dlg.ShowDialog() != true) return;
+        if (!IsUnlocked) return; // locked while the dialogs were open
 
         try
         {
@@ -566,6 +567,7 @@ public partial class MainViewModel : ObservableObject
         var pwDialog = new PasswordDialog("Enter the vault password:", false);
         if (pwDialog.ShowDialog() != true || string.IsNullOrEmpty(pwDialog.Password))
             return;
+        if (!IsUnlocked) return; // locked while the dialogs were open
 
         try
         {
@@ -985,6 +987,7 @@ public partial class MainViewModel : ObservableObject
         var pwDialog = new PasswordDialog("Enter the backup password:", false);
         if (pwDialog.ShowDialog() != true || string.IsNullOrEmpty(pwDialog.Password))
             return;
+        if (!IsUnlocked) return; // locked while the dialogs were open
 
         try
         {

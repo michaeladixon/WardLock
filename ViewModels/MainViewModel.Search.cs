@@ -86,8 +86,9 @@ public partial class MainViewModel
 
         // Dialogs opened while unlocked (auto-type picker, password prompts,
         // audit log) hold account data and would act after their modal loop
-        // returns. Close every window but the main one; callers re-check
-        // IsUnlocked after ShowDialog.
+        // returns. Close every WPF window but the main one. Win32 file dialogs
+        // can't be closed from here, so commands that show them re-check
+        // IsUnlocked afterwards.
         var app = System.Windows.Application.Current;
         if (app != null)
         {
