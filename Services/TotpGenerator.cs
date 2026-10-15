@@ -35,20 +35,33 @@ public static class TotpGenerator
             // Decryption failed (corrupt blob or different user). Return empty code so UI remains responsive.
             return string.Empty;
         }
-        var secretBytes = Base32Encoding.ToBytes(secret);
 
-        if (account.Encoder == OtpEncoder.Steam)
-            return ComputeSteamCode(secretBytes, account.Period, time.ToUnixTimeSeconds());
-
-        var mode = account.Algorithm switch
+        // Accounts are validated on entry, but data written by older versions,
+        // a teammate's client, or a hand-edited file can still hold a bad
+        // secret/digits/period. This runs on the UI refresh timer: never throw.
+        try
         {
-            OtpHashAlgorithm.Sha256 => OtpHashMode.Sha256,
-            OtpHashAlgorithm.Sha512 => OtpHashMode.Sha512,
-            _ => OtpHashMode.Sha1
-        };
+            var secretBytes = Base32Encoding.ToBytes(secret);
 
-        var totp = new Totp(secretBytes, step: account.Period, mode: mode, totpSize: account.Digits);
-        return totp.ComputeTotp(time.UtcDateTime);
+            if (account.Encoder == OtpEncoder.Steam)
+                return account.Period > 0
+                    ? ComputeSteamCode(secretBytes, account.Period, time.ToUnixTimeSeconds())
+                    : string.Empty;
+
+            var mode = account.Algorithm switch
+            {
+                OtpHashAlgorithm.Sha256 => OtpHashMode.Sha256,
+                OtpHashAlgorithm.Sha512 => OtpHashMode.Sha512,
+                _ => OtpHashMode.Sha1
+            };
+
+            var totp = new Totp(secretBytes, step: account.Period, mode: mode, totpSize: account.Digits);
+            return totp.ComputeTotp(time.UtcDateTime);
+        }
+        catch (ArgumentException)
+        {
+            return string.Empty;
+        }
     }
 
     /// <summary>
@@ -56,6 +69,7 @@ public static class TotpGenerator
     /// </summary>
     public static int SecondsRemaining(int period = 30)
     {
+        if (period <= 0) return 0;
         var epoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         return period - (int)(epoch % period);
     }

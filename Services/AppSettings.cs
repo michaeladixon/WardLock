@@ -25,29 +25,46 @@ public static class AppSettings
     private static Dictionary<string, string> _settings = new();
     private static bool _loaded;
 
+    // Set when settings.json exists but couldn't be read: saving would replace
+    // the user's lock configuration and vault list with defaults.
+    private static bool _readFailed;
+
+    /// <summary>
+    /// Non-null when settings.json was unreadable at startup (moved aside or
+    /// locked); the UI surfaces it once.
+    /// </summary>
+    public static string? LoadWarning { get; private set; }
+
     private static void EnsureLoaded()
     {
         if (_loaded) return;
         _loaded = true;
+        if (!File.Exists(SettingsPath)) return;
+
         try
         {
-            if (File.Exists(SettingsPath))
-            {
-                var json = File.ReadAllText(SettingsPath);
-                _settings = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
-            }
+            var json = File.ReadAllText(SettingsPath);
+            _settings = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
         }
-        catch
+        catch (JsonException)
+        {
+            // Preserve the damaged file for recovery; the next Save() starts fresh.
+            _settings = new();
+            var movedTo = AtomicFile.Quarantine(SettingsPath);
+            LoadWarning = $"settings.json was unreadable and was moved to {Path.GetFileName(movedTo)}. App lock and remembered vaults were reset.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _settings = new();
+            _readFailed = true;
+            LoadWarning = "settings.json couldn't be read; settings changes won't be saved this session.";
         }
     }
 
     private static void Save()
     {
-        var dir = Path.GetDirectoryName(SettingsPath)!;
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true }));
+        if (_readFailed) return;
+        AtomicFile.WriteAllText(SettingsPath, JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true }));
     }
 
     public static bool IsWindowsHelloEnabled

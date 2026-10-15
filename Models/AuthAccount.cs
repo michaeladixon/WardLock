@@ -63,6 +63,7 @@ public class CodeWindow
     /// <summary>Code for the given unix time, or null when outside the window.</summary>
     public string? CodeAt(long unixSeconds, int period)
     {
+        if (period <= 0 || Width <= 0) return null; // malformed viewer payload
         var index = unixSeconds / period - StartStep;
         if (index < 0 || (index + 1) * Width > Codes.Length) return null;
         return Codes.Substring((int)index * Width, Width);

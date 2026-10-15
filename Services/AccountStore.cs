@@ -6,7 +6,7 @@ namespace WardLock.Services;
 
 public class AccountStore
 {
-    private static readonly string StorePath = Path.Combine(
+    private static readonly string DefaultStorePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "WardLock", "accounts.json");
 
@@ -16,28 +16,52 @@ public class AccountStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    private readonly string _storePath;
+
+    public AccountStore(string? storePath = null)
+    {
+        _storePath = storePath ?? DefaultStorePath;
+    }
+
     public List<AuthAccount> Accounts { get; private set; } = [];
+
+    /// <summary>
+    /// Set by <see cref="Load"/> when accounts.json was unreadable and has been
+    /// moved aside; null after a normal load.
+    /// </summary>
+    public string? LoadWarning { get; private set; }
 
     public void Load()
     {
-        if (!File.Exists(StorePath))
+        LoadWarning = null;
+        if (!File.Exists(_storePath))
         {
             Accounts = [];
             return;
         }
 
-        var json = File.ReadAllText(StorePath);
-        Accounts = JsonSerializer.Deserialize<List<AuthAccount>>(json, JsonOpts) ?? [];
+        List<AuthAccount>? loaded;
+        try
+        {
+            loaded = JsonSerializer.Deserialize<List<AuthAccount>>(File.ReadAllText(_storePath), JsonOpts);
+        }
+        catch (JsonException)
+        {
+            // Never let the next Save() overwrite a damaged-but-maybe-recoverable
+            // file: move it aside and start empty.
+            var movedTo = AtomicFile.Quarantine(_storePath);
+            LoadWarning = $"accounts.json was unreadable and was moved to {Path.GetFileName(movedTo)}. Restore a backup or contact support to recover it.";
+            Accounts = [];
+            return;
+        }
+
         // Sort by SortOrder on load
-        Accounts = Accounts.OrderBy(a => a.SortOrder).ToList();
+        Accounts = (loaded ?? []).OrderBy(a => a.SortOrder).ToList();
     }
 
     public void Save()
     {
-        var dir = Path.GetDirectoryName(StorePath)!;
-        Directory.CreateDirectory(dir);
-        var json = JsonSerializer.Serialize(Accounts, JsonOpts);
-        File.WriteAllText(StorePath, json);
+        AtomicFile.WriteAllText(_storePath, JsonSerializer.Serialize(Accounts, JsonOpts));
     }
 
     public void Add(AuthAccount account)
@@ -88,56 +112,21 @@ public class AccountStore
     }
 
     /// <summary>
-    /// Parse an otpauth:// URI (from QR code or manual paste).
-    /// Format: otpauth://totp/Issuer:label?secret=BASE32&issuer=Issuer&algorithm=SHA1&digits=6&period=30
-    /// Steam Guard variants: otpauth://steam/... (Aegis) or encoder=steam query param (KeePassXC).
+    /// Parse an otpauth:// URI into a personal account (secret DPAPI-encrypted).
+    /// Throws ArgumentException for unsupported or invalid URIs.
     /// </summary>
     public static AuthAccount ParseOtpAuthUri(string uri)
     {
-        var isSteamScheme = uri.StartsWith("otpauth://steam/", StringComparison.OrdinalIgnoreCase);
-        if (!uri.StartsWith("otpauth://totp/", StringComparison.OrdinalIgnoreCase) && !isSteamScheme)
-            throw new ArgumentException("Only TOTP URIs are supported.");
-
-        var uriObj = new Uri(uri);
-        var path = Uri.UnescapeDataString(uriObj.AbsolutePath.TrimStart('/'));
-        var query = System.Web.HttpUtility.ParseQueryString(uriObj.Query);
-
-        var secret = query["secret"] ?? throw new ArgumentException("Missing secret parameter.");
-        var issuer = query["issuer"] ?? string.Empty;
-        var label = path;
-
-        // If path is "Issuer:user@example.com", split it
-        if (path.Contains(':'))
-        {
-            var parts = path.Split(':', 2);
-            if (string.IsNullOrEmpty(issuer)) issuer = parts[0];
-            label = parts[1];
-        }
-
-        var encoder = isSteamScheme || string.Equals(query["encoder"], "steam", StringComparison.OrdinalIgnoreCase)
-            ? OtpEncoder.Steam
-            : OtpEncoder.Default;
-        if (encoder == OtpEncoder.Steam && string.IsNullOrEmpty(issuer))
-            issuer = "Steam";
-
-        var digits = int.TryParse(query["digits"], out var d) ? d : 6;
-        var period = int.TryParse(query["period"], out var p) ? p : 30;
-        var algo = (query["algorithm"]?.ToUpperInvariant()) switch
-        {
-            "SHA256" => OtpHashAlgorithm.Sha256,
-            "SHA512" => OtpHashAlgorithm.Sha512,
-            _ => OtpHashAlgorithm.Sha1
-        };
-
+        var p = OtpAuthUri.Parse(uri);
         return new AuthAccount
         {
-            Issuer = issuer,
-            Label = label,
-            EncryptedSecret = SecretVault.Encrypt(secret),
-            Digits = encoder == OtpEncoder.Steam ? 5 : digits,
-            Period = period,
-            Algorithm = algo,
-            Encoder = encoder
+            Issuer = p.Issuer,
+            Label = p.Label,
+            EncryptedSecret = SecretVault.Encrypt(p.Secret),
+            Digits = p.Digits,
+            Period = p.Period,
+            Algorithm = p.Algorithm,
+            Encoder = p.Encoder
         };
     }
 }

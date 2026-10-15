@@ -27,7 +27,7 @@ public static class VaultPasswordCache
         Directory.CreateDirectory(CacheDir);
         var key = GetKey(vaultPath);
         var encrypted = SecretVault.Encrypt(password);
-        File.WriteAllText(Path.Combine(CacheDir, key), encrypted);
+        AtomicFile.WriteAllText(Path.Combine(CacheDir, key), encrypted);
     }
 
     /// <summary>

@@ -46,8 +46,10 @@ public sealed class AuditEntry
 /// <summary>
 /// Append-only, tamper-evident audit log stored as a JSON-lines sidecar next to
 /// the vault file ("team-vault.wardlock" → "team-vault.wardlock.log"). Each entry
-/// embeds the previous entry's hash, so any edit, reorder, or truncation breaks
-/// the chain and is detectable without a server.
+/// embeds the previous entry's hash, so an edit, reorder, or deletion in the
+/// middle breaks the chain and is detectable without a server. Removing entries
+/// from the *end* is not detectable (nothing anchors the head), and the hash is
+/// unkeyed, so a member with write access can rewrite and re-hash a suffix.
 ///
 /// Threat model (documented in README): entries are appended by cooperating
 /// WardLock clients under the acting member's Windows username. A hostile member

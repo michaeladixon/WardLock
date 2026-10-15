@@ -227,7 +227,13 @@ public partial class MainViewModel : ObservableObject
             }
 
             var storedSub = AppSettings.OAuthSub;
-            if (string.IsNullOrEmpty(storedSub) || identity.Sub == storedSub)
+            if (string.IsNullOrEmpty(storedSub))
+            {
+                // Fail closed: without the bound account id any sign-in would unlock.
+                StatusMessage = "No account is bound to this lock. Delete %LOCALAPPDATA%\\WardLock\\settings.json to reset the app lock.";
+                return;
+            }
+            if (string.Equals(identity.Sub, storedSub, StringComparison.Ordinal))
             {
                 Unlock();
                 RestoreWindow?.Invoke();
@@ -243,13 +249,30 @@ public partial class MainViewModel : ObservableObject
 
     private void Unlock()
     {
+        // Load first: if accounts.json can't be read, stay locked rather than
+        // showing an empty list whose next save would overwrite the file.
+        try
+        {
+            _store.Load();
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            StatusMessage = $"Couldn't read your accounts: {ex.Message}";
+            return;
+        }
+
         IsUnlocked = true;
         ResetIdleTimer();
-        _store.Load();
 
         Accounts.Clear();
         foreach (var acct in _store.Accounts)
             Accounts.Add(new AccountViewModel(acct));
+
+        // Lock() clears the list but leaves vaults open (and watching), so a
+        // lock/unlock cycle must put their accounts back.
+        foreach (var vault in _openVaults)
+            foreach (var acct in vault.Accounts)
+                Accounts.Add(new AccountViewModel(acct));
 
         // Auto-open remembered vaults
         AutoOpenRememberedVaults();
@@ -258,9 +281,11 @@ public partial class MainViewModel : ObservableObject
         RefreshAll();
 
         var vaultCount = _openVaults.Count;
-        StatusMessage = vaultCount > 0
-            ? $"{Accounts.Count} account(s) loaded. {vaultCount} vault(s) reconnected."
-            : $"{Accounts.Count} account(s) loaded.";
+        StatusMessage = _store.LoadWarning
+            ?? AppSettings.LoadWarning
+            ?? (vaultCount > 0
+                ? $"{Accounts.Count} account(s) loaded. {vaultCount} vault(s) connected."
+                : $"{Accounts.Count} account(s) loaded.");
     }
 
     /// <summary>
@@ -293,12 +318,17 @@ public partial class MainViewModel : ObservableObject
                 vault.Open(password);
                 RegisterVault(vault);
             }
-            catch
+            catch (System.Security.Cryptography.AuthenticationTagMismatchException)
             {
-                // Wrong password (changed by teammate?), corrupted, etc.
-                // Remove stale cache so user gets prompted next time
+                // Password changed by a teammate: forget the stale cache so the
+                // user is prompted next time.
                 VaultPasswordCache.Remove(path);
                 AppSettings.RemoveRememberedVaultPath(path);
+            }
+            catch
+            {
+                // Share offline, file mid-write, etc. — transient; keep the
+                // vault remembered and retry on the next unlock.
             }
         }
     }
@@ -371,12 +401,12 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            var secret = ManualSecret.Trim().Replace(" ", "").ToUpperInvariant();
-            if (string.IsNullOrEmpty(secret))
+            if (string.IsNullOrWhiteSpace(ManualSecret))
             {
                 StatusMessage = "Secret is required.";
                 return;
             }
+            var secret = OtpAuthUri.NormalizeSecret(ManualSecret);
 
             if (IsDuplicate(ManualIssuer.Trim(), ManualLabel.Trim()))
             {
@@ -663,6 +693,9 @@ public partial class MainViewModel : ObservableObject
         {
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
+                // Locked: the list stays empty; Unlock() re-adds vault accounts.
+                if (!IsUnlocked || !_openVaults.Contains(vault)) return;
+
                 var old = Accounts.Where(a => a.VaultName == vault.VaultName).ToList();
                 foreach (var vm in old)
                     Accounts.Remove(vm);
@@ -767,16 +800,25 @@ public partial class MainViewModel : ObservableObject
     {
         if (GoogleAuthMigrationDecoder.IsMigrationUri(uri))
         {
-            var otpUris = GoogleAuthMigrationDecoder.ParseMigrationUri(uri);
-            int added = 0, skipped = 0;
+            var (otpUris, unsupported) = GoogleAuthMigrationDecoder.ParseMigrationUri(uri);
+            int added = 0, duplicates = 0;
             foreach (var otpUri in otpUris)
             {
-                if (AddSingleOtpUri(otpUri)) added++; else skipped++;
+                try
+                {
+                    if (AddSingleOtpUri(otpUri)) added++; else duplicates++;
+                }
+                catch (ArgumentException)
+                {
+                    unsupported++; // invalid secret/parameters; keep importing the rest
+                }
             }
             IsAddPanelVisible = false;
-            StatusMessage = skipped > 0
-                ? $"Imported {added} account(s) from Google Authenticator. {skipped} duplicate(s) skipped."
-                : $"Imported {added} account(s) from Google Authenticator.";
+            var notes = new List<string>();
+            if (duplicates > 0) notes.Add($"{duplicates} duplicate(s) skipped");
+            if (unsupported > 0) notes.Add($"{unsupported} unsupported (HOTP/MD5/invalid) skipped");
+            StatusMessage = $"Imported {added} account(s) from Google Authenticator."
+                + (notes.Count > 0 ? " " + string.Join(", ", notes) + "." : string.Empty);
             return;
         }
 
@@ -834,7 +876,8 @@ public partial class MainViewModel : ObservableObject
 
         var plaintext = SecretVault.Decrypt(personal.EncryptedSecret);
         vault.AddAccount(personal.Issuer, personal.Label, plaintext,
-            personal.Digits, personal.Period, personal.Algorithm, personal.Encoder, personal.Domain);
+            personal.Digits, personal.Period, personal.Algorithm, personal.Encoder, personal.Domain,
+            personal.RequireApproval);
 
         _store.Remove(personal.Id);
 
@@ -869,7 +912,9 @@ public partial class MainViewModel : ObservableObject
             Digits          = vaultAccount.Digits,
             Period          = vaultAccount.Period,
             Algorithm       = vaultAccount.Algorithm,
-            Domain          = vaultAccount.Domain
+            Encoder         = vaultAccount.Encoder,
+            Domain          = vaultAccount.Domain,
+            RequireApproval = vaultAccount.RequireApproval
         };
 
         vault.RemoveAccount(vaultAccount.Id);
@@ -936,13 +981,15 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            var imported = ExportImportService.Import(dlg.FileName, pwDialog.Password);
+            var (imported, skipped) = ExportImportService.Import(dlg.FileName, pwDialog.Password);
             _store.AddRange(imported);
 
             foreach (var acct in imported)
                 Accounts.Add(new AccountViewModel(acct));
 
-            StatusMessage = $"Imported {imported.Count} account(s).";
+            StatusMessage = skipped > 0
+                ? $"Imported {imported.Count} account(s). {skipped} invalid entr{(skipped == 1 ? "y" : "ies")} skipped."
+                : $"Imported {imported.Count} account(s).";
         }
         catch (System.Security.Cryptography.AuthenticationTagMismatchException)
         {
