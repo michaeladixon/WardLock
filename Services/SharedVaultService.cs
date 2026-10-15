@@ -75,6 +75,7 @@ public class SharedVaultService : IDisposable
     private Timer? _refreshTimer;
     private DateTime _lastWriteByUs = DateTime.MinValue;
     private readonly object _ioLock = new();
+    private bool _disposed;
 
     /// <summary>Fires when the vault file is modified externally (by a teammate).</summary>
     public event Action? ExternalChange;
@@ -130,6 +131,7 @@ public class SharedVaultService : IDisposable
     {
         lock (_ioLock)
         {
+            if (_disposed) return;
             var fileJson = File.ReadAllText(FilePath);
             using var doc = JsonDocument.Parse(fileJson);
             var version = doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : "1.0";
@@ -169,10 +171,17 @@ public class SharedVaultService : IDisposable
         var file = JsonSerializer.Deserialize<VaultFileV2>(fileJson, JsonOpts)
             ?? throw new InvalidOperationException("Invalid vault file.");
 
-        HorizonHours = file.HorizonHours > 0 ? file.HorizonHours : DefaultHorizonHours;
+        // horizonHours and viewerPayloadGeneratedAt sit in the file header outside
+        // every GCM seal, and viewers need write access to the share. Bound them
+        // so a tampered header can't make admins precompute (and seal for
+        // viewers) more than the default horizon, or stop the stale-window
+        // refresh by claiming a future generation time.
+        HorizonHours = file.HorizonHours is > 0 and <= DefaultHorizonHours ? file.HorizonHours : DefaultHorizonHours;
         _viewerSlot = file.Viewer.IsPresent ? file.Viewer : null;
         _viewerGeneratedAt = DateTime.TryParse(file.ViewerPayloadGeneratedAt, null,
-            System.Globalization.DateTimeStyles.RoundtripKind, out var g) ? g : DateTime.MinValue;
+            System.Globalization.DateTimeStyles.RoundtripKind, out var g) && g.ToUniversalTime() <= DateTime.UtcNow
+            ? g.ToUniversalTime()
+            : DateTime.MinValue;
 
         // Try the admin slot first; fall back to the viewer slot.
         try
@@ -253,6 +262,11 @@ public class SharedVaultService : IDisposable
     {
         EnsureAdmin();
 
+        // The admin slot is tried first on open, so a shared password would
+        // silently make every "viewer" an admin with the seeds.
+        if (string.Equals(viewerPassword, _password, StringComparison.Ordinal))
+            throw new ArgumentException("The viewer password must differ from the vault (admin) password.");
+
         _masterKey ??= RandomNumberGenerator.GetBytes(KeySize); // v1 → v2 upgrade
         _viewerKey = RandomNumberGenerator.GetBytes(KeySize);
 
@@ -305,21 +319,26 @@ public class SharedVaultService : IDisposable
     /// </summary>
     public void AddAccount(string issuer, string label, string plaintextSecret,
         int digits = 6, int period = 30, OtpHashAlgorithm algorithm = OtpHashAlgorithm.Sha1,
-        OtpEncoder encoder = OtpEncoder.Default, string? domain = null)
+        OtpEncoder encoder = OtpEncoder.Default, string? domain = null, bool requireApproval = false)
     {
         EnsureAdmin();
+        if (encoder == OtpEncoder.Steam) digits = 5;
+        var secret = OtpAuthUri.NormalizeSecret(plaintextSecret);
+        OtpAuthUri.Validate(digits, period);
+
         var account = new AuthAccount
         {
             Issuer = issuer,
             Label = label,
-            PlaintextSecret = plaintextSecret,
+            PlaintextSecret = secret,
             VaultName = VaultName,
-            Digits = encoder == OtpEncoder.Steam ? 5 : digits,
+            Digits = digits,
             Period = period,
             Algorithm = algorithm,
             Encoder = encoder,
             SortOrder = Accounts.Count > 0 ? Accounts.Max(a => a.SortOrder) + 1 : 0,
-            Domain = domain
+            Domain = domain,
+            RequireApproval = requireApproval
         };
 
         Accounts.Add(account);
@@ -360,51 +379,17 @@ public class SharedVaultService : IDisposable
     {
         EnsureAdmin();
 
-        // Parse the URI to extract the secret in plaintext
-        var isSteamScheme = otpAuthUri.StartsWith("otpauth://steam/", StringComparison.OrdinalIgnoreCase);
-        if (!otpAuthUri.StartsWith("otpauth://totp/", StringComparison.OrdinalIgnoreCase) && !isSteamScheme)
-            throw new ArgumentException("Only TOTP URIs are supported.");
-
-        var uriObj = new Uri(otpAuthUri);
-        var path = Uri.UnescapeDataString(uriObj.AbsolutePath.TrimStart('/'));
-        var query = System.Web.HttpUtility.ParseQueryString(uriObj.Query);
-
-        var secret = query["secret"] ?? throw new ArgumentException("Missing secret parameter.");
-        var issuer = query["issuer"] ?? string.Empty;
-        var label = path;
-
-        if (path.Contains(':'))
-        {
-            var parts = path.Split(':', 2);
-            if (string.IsNullOrEmpty(issuer)) issuer = parts[0];
-            label = parts[1];
-        }
-
-        var encoder = isSteamScheme || string.Equals(query["encoder"], "steam", StringComparison.OrdinalIgnoreCase)
-            ? OtpEncoder.Steam
-            : OtpEncoder.Default;
-        if (encoder == OtpEncoder.Steam && string.IsNullOrEmpty(issuer))
-            issuer = "Steam";
-
-        var digits = int.TryParse(query["digits"], out var d) ? d : 6;
-        var period = int.TryParse(query["period"], out var p) ? p : 30;
-        var algo = (query["algorithm"]?.ToUpperInvariant()) switch
-        {
-            "SHA256" => OtpHashAlgorithm.Sha256,
-            "SHA512" => OtpHashAlgorithm.Sha512,
-            _ => OtpHashAlgorithm.Sha1
-        };
-
+        var p = OtpAuthUri.Parse(otpAuthUri);
         var account = new AuthAccount
         {
-            Issuer = issuer,
-            Label = label,
-            PlaintextSecret = secret,
+            Issuer = p.Issuer,
+            Label = p.Label,
+            PlaintextSecret = p.Secret,
             VaultName = VaultName,
-            Digits = encoder == OtpEncoder.Steam ? 5 : digits,
-            Period = period,
-            Algorithm = algo,
-            Encoder = encoder,
+            Digits = p.Digits,
+            Period = p.Period,
+            Algorithm = p.Algorithm,
+            Encoder = p.Encoder,
             SortOrder = Accounts.Count > 0 ? Accounts.Max(a => a.SortOrder) + 1 : 0
         };
 
@@ -451,15 +436,29 @@ public class SharedVaultService : IDisposable
 
             var plainBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(exportAccounts, JsonOpts));
 
-            var payloadJson = _viewerSlot == null
-                ? SerializeV1(plainBytes, exportAccounts.Count)
-                : SerializeV2(plainBytes, exportAccounts.Count);
+            string payloadJson;
+            try
+            {
+                payloadJson = _viewerSlot == null
+                    ? SerializeV1(plainBytes, exportAccounts.Count)
+                    : SerializeV2(plainBytes, exportAccounts.Count);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(plainBytes);
+            }
 
-            // Write with file lock to prevent corruption from concurrent saves
+            // Temp file + rename: a crash or a dropped share mid-write leaves
+            // the previous vault intact instead of a truncated file.
             _lastWriteByUs = DateTime.UtcNow;
-            using var fs = new FileStream(FilePath, FileMode.Create, FileAccess.Write, FileShare.None);
-            using var writer = new StreamWriter(fs, Encoding.UTF8);
-            writer.Write(payloadJson);
+            AtomicFile.WriteAllText(FilePath, payloadJson);
+
+            // A replace raises Renamed/Created only. Teammates still on a
+            // release whose watcher filters LastWrite|Size would never reload
+            // and later overwrite this save with their stale list; touching the
+            // write time raises the LastWrite change they listen for.
+            File.SetLastWriteTimeUtc(FilePath, DateTime.UtcNow);
+            _lastWriteByUs = DateTime.UtcNow;
         }
     }
 
@@ -602,19 +601,28 @@ public class SharedVaultService : IDisposable
         var name = Path.GetFileName(FilePath);
         if (dir == null) return;
 
+        // FileName: saves replace the file by rename (AtomicFile), which raises
+        // Renamed/Created rather than Changed.
         _watcher = new FileSystemWatcher(dir, name)
         {
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-            EnableRaisingEvents = true
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName,
         };
 
         _watcher.Changed += OnFileChanged;
+        _watcher.Created += OnFileChanged;
+        _watcher.Renamed += OnFileChanged;
+        _watcher.EnableRaisingEvents = true;
     }
 
     private void OnFileChanged(object sender, FileSystemEventArgs e)
     {
+        // Renamed also fires when the vault is renamed away; only react when
+        // the vault path itself now holds new content.
+        if (!string.Equals(e.FullPath, FilePath, StringComparison.OrdinalIgnoreCase))
+            return;
+
         // Debounce: ignore our own writes (within 2 seconds)
-        if ((DateTime.UtcNow - _lastWriteByUs).TotalSeconds < 2)
+        if (_disposed || (DateTime.UtcNow - _lastWriteByUs).TotalSeconds < 2)
             return;
 
         // Small delay to let the write finish (network shares can be slow)
@@ -623,7 +631,8 @@ public class SharedVaultService : IDisposable
         try
         {
             Reload();
-            ExternalChange?.Invoke();
+            if (!_disposed)
+                ExternalChange?.Invoke();
         }
         catch
         {
@@ -638,6 +647,10 @@ public class SharedVaultService : IDisposable
 
     public void Dispose()
     {
+        // Under the I/O lock so an in-flight watcher Reload can't repopulate
+        // secrets or keys after they're cleared below.
+        lock (_ioLock) _disposed = true;
+        ExternalChange = null;
         _watcher?.Dispose();
         _watcher = null;
         _refreshTimer?.Dispose();

@@ -55,7 +55,7 @@ public static class BrowserIntegrationInstaller
         };
 
         Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath)!);
-        File.WriteAllText(ManifestPath,
+        AtomicFile.WriteAllText(ManifestPath,
             JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
 
         foreach (var keyPath in RegistryKeys)

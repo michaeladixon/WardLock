@@ -82,7 +82,7 @@ of pick 1+3 above.
 | | admin | viewer |
 |---|---|---|
 | see / copy / auto-type / browser-fill current codes | ✔ | ✔ (within horizon) |
-| add / remove accounts, change domain or approval flag | ✔ | ✖ — **cryptographically**: a viewer cannot produce a valid `payload` without K_master, so writes are impossible, not just hidden |
+| add / remove accounts, change domain or approval flag | ✔ | ✖ in the admin `payload` — **cryptographically**: a viewer cannot produce a valid `payload` without K_master. ⚠ The *viewer* payload is sealed with K_viewer, which every viewer holds, so a viewer with write access can re-seal it (e.g. change another viewer's fill domain or approval flag) until the next admin save — see Honest limits |
 | move a vault account to personal (seed extraction) | ✔ | ✖ — the seed isn't present in the viewer's process at all |
 | set / rotate / remove the viewer password | ✔ | ✖ |
 | audit log: append + view | ✔ | ✔ (appends are per-member accountability, wanted from viewers) |
@@ -101,14 +101,39 @@ the v1 format.
   as v1 **until** a viewer password is first set — no forced upgrade.
 - v2 requires all *members* to run a WardLock version that reads v2. Set the
   viewer password only after everyone has upgraded.
+- **Share permissions:** saves write a temp file next to the vault and swap it
+  in (`ReplaceFile`, which keeps the vault file's ACL and owner). Members who
+  save (admins) therefore need *create* permission in the vault's folder and
+  *delete* permission on the vault file, not just write access to the file.
+  Viewers append to the `.log` sidecar, so they need write access there.
+- **Mixed versions:** saves also touch the file's last-write time so that
+  clients from before atomic saves still notice and reload; upgrading every
+  member is still recommended.
 
 ## Honest limits (unchanged or accepted)
 
 - **A viewer sees codes** — that's the role's purpose. A malicious viewer can
   use codes while authorized, and can hoard at most the current horizon.
+  `horizonHours` and `viewerPayloadGeneratedAt` live in the unauthenticated
+  file header, so clients clamp them on read (horizon ≤ the 72 h default; a
+  future generation time is ignored) — a viewer editing the header can't make
+  admins precompute a longer window.
+- **Viewers can forge the viewer payload.** GCM under K_viewer proves only
+  that *some* key holder wrote it, and every viewer holds K_viewer. A viewer
+  with write access to the share can re-seal the viewer payload with altered
+  metadata — fill `domain`, `requireApproval` — affecting other *viewers'*
+  browser fills until an admin's next save rewrites it (≤ horizon/3). Codes
+  can't be forged into validity, and admins (who read the K_master payload)
+  are unaffected. The fix is an admin signature over the viewer payload
+  (tracked as a follow-up issue).
 - **Anyone with share write access can destroy the file** (delete/garbage).
-  GCM tags make any tampering detectable; availability was never in the threat
-  model of a file on a share.
+  The admin payload's GCM tag makes tampering with it detectable; availability
+  was never in the threat model of a file on a share. Saves are atomic
+  (temp file + rename), so a crash or dropped connection mid-save leaves the
+  previous version intact rather than a truncated file.
+- **Concurrent admin edits are last-writer-wins.** Two admins saving within
+  the watcher's debounce window can drop one change; there is no revision
+  check yet (tracked as a follow-up issue).
 - **The admin password is still shared** among admins; per-member admin
   identity remains keyed to Windows usernames in the audit log (see the audit
   trail threat model in the README).

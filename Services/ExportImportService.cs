@@ -37,7 +37,8 @@ public static class ExportImportService
             Algorithm = a.Algorithm.ToString(),
             Encoder = a.Encoder.ToString(),
             SortOrder = a.SortOrder > 0 ? a.SortOrder : i,
-            Domain = a.Domain
+            Domain = a.Domain,
+            RequireApproval = a.RequireApproval
         }).ToList();
 
         var plainJson = JsonSerializer.Serialize(exportAccounts, JsonOpts);
@@ -65,15 +66,20 @@ public static class ExportImportService
             Tag = Convert.ToBase64String(tag)
         };
 
-        var payloadJson = JsonSerializer.Serialize(payload, JsonOpts);
-        File.WriteAllText(filePath, payloadJson);
+        CryptographicOperations.ZeroMemory(key);
+        CryptographicOperations.ZeroMemory(plainBytes);
+
+        AtomicFile.WriteAllText(filePath, JsonSerializer.Serialize(payload, JsonOpts));
     }
 
     /// <summary>
     /// Import accounts from an encrypted export file.
     /// Secrets are decrypted with the password and re-encrypted with DPAPI.
     /// </summary>
-    public static List<AuthAccount> Import(string filePath, string password)
+    /// <summary>Accounts restored from a backup, plus entries skipped as unusable.</summary>
+    public sealed record ImportResult(List<AuthAccount> Accounts, int Skipped);
+
+    public static ImportResult Import(string filePath, string password)
     {
         var payloadJson = File.ReadAllText(filePath);
         var payload = JsonSerializer.Deserialize<ExportPayload>(payloadJson, JsonOpts)
@@ -88,28 +94,59 @@ public static class ExportImportService
         var key = DeriveKey(password, salt);
         var plainBytes = new byte[cipherText.Length];
 
-        using var aes = new AesGcm(key, TagSize);
-        aes.Decrypt(nonce, cipherText, tag, plainBytes); // Throws if password wrong
+        string plainJson;
+        try
+        {
+            using var aes = new AesGcm(key, TagSize);
+            aes.Decrypt(nonce, cipherText, tag, plainBytes); // Throws if password wrong
+            plainJson = Encoding.UTF8.GetString(plainBytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+            CryptographicOperations.ZeroMemory(plainBytes);
+        }
 
-        var plainJson = Encoding.UTF8.GetString(plainBytes);
         var exportAccounts = JsonSerializer.Deserialize<List<ExportAccount>>(plainJson, JsonOpts)
             ?? throw new InvalidOperationException("Decrypted data is not valid.");
 
-        // Convert back to AuthAccounts with DPAPI-encrypted secrets
-        return exportAccounts.Select(e => new AuthAccount
+        // Convert back to AuthAccounts with DPAPI-encrypted secrets. An entry
+        // that can't produce a code is skipped rather than failing the restore.
+        var accounts = new List<AuthAccount>();
+        var skipped = 0;
+        foreach (var e in exportAccounts)
         {
-            Id = Guid.NewGuid().ToString(),
-            Issuer = e.Issuer,
-            Label = e.Label,
-            EncryptedSecret = SecretVault.Encrypt(e.Secret),
-            Digits = e.Digits,
-            Period = e.Period,
-            Algorithm = Enum.TryParse<OtpHashAlgorithm>(e.Algorithm, true, out var a) ? a : OtpHashAlgorithm.Sha1,
-            Encoder = Enum.TryParse<OtpEncoder>(e.Encoder, true, out var enc) ? enc : OtpEncoder.Default,
-            SortOrder = e.SortOrder,
-            CreatedAt = DateTime.UtcNow,
-            Domain = e.Domain
-        }).ToList();
+            var encoder = Enum.TryParse<OtpEncoder>(e.Encoder, true, out var enc) ? enc : OtpEncoder.Default;
+            var digits = encoder == OtpEncoder.Steam ? 5 : e.Digits;
+            string secret;
+            try
+            {
+                secret = OtpAuthUri.NormalizeSecret(e.Secret);
+                OtpAuthUri.Validate(digits, e.Period);
+            }
+            catch (ArgumentException)
+            {
+                skipped++;
+                continue;
+            }
+
+            accounts.Add(new AuthAccount
+            {
+                Id = Guid.NewGuid().ToString(),
+                Issuer = e.Issuer,
+                Label = e.Label,
+                EncryptedSecret = SecretVault.Encrypt(secret),
+                Digits = digits,
+                Period = e.Period,
+                Algorithm = Enum.TryParse<OtpHashAlgorithm>(e.Algorithm, true, out var a) ? a : OtpHashAlgorithm.Sha1,
+                Encoder = encoder,
+                SortOrder = e.SortOrder,
+                CreatedAt = DateTime.UtcNow,
+                Domain = e.Domain,
+                RequireApproval = e.RequireApproval
+            });
+        }
+        return new ImportResult(accounts, skipped);
     }
 
     private static byte[] DeriveKey(string password, byte[] salt)

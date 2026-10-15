@@ -112,7 +112,7 @@ public partial class MainWindow : Window
         WindowState = WindowState.Normal;
     }
 
-    private void ShowFromTray()
+    internal void ShowFromTray()
     {
         Show();
         WindowState = WindowState.Normal;
