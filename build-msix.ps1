@@ -27,6 +27,11 @@
 .PARAMETER Version
     Package version. Default: 1.0.0.0
 
+.PARAMETER TimestampUrl
+    RFC 3161 timestamp server for signing. A timestamped signature stays valid
+    after the certificate expires. Pass '' to sign without a timestamp
+    (offline builds). Default: http://timestamp.digicert.com
+
 .EXAMPLE
     .\build-msix.ps1
     .\build-msix.ps1 -Store -Version "1.0.0.0"
@@ -41,7 +46,8 @@ param(
     [switch]$RunWack,
     [switch]$Store,
     [string]$CertSubject = 'CN=WardLock-Dev',
-    [string]$Version = '1.0.0.0'
+    [string]$Version = '1.0.0.0',
+    [string]$TimestampUrl = 'http://timestamp.digicert.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -405,15 +411,17 @@ if ($Store) {
 }
 elseif ($Thumbprint) {
     Write-Host '  Signing MSIX...' -ForegroundColor DarkGray
-    & $signTool sign /fd SHA256 /sha1 $Thumbprint /td SHA256 $msixOutput
+    $signArgs = @('sign', '/fd', 'SHA256', '/sha1', $Thumbprint)
+    if ($TimestampUrl) { $signArgs += @('/tr', $TimestampUrl, '/td', 'SHA256') }
+    & $signTool @signArgs $msixOutput
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning '  SignTool failed. The MSIX was created but is unsigned.'
-        Write-Host '  You may need to run as admin or check certificate is in CurrentUser\My' -ForegroundColor DarkGray
+        # Fail rather than leave an unsigned package that looks like a sideload build.
+        Remove-Item $msixOutput -ErrorAction SilentlyContinue
+        Write-Error ('SignTool failed with exit code ' + $LASTEXITCODE + '. Check the certificate is in CurrentUser\My (or pass -TimestampUrl '''' if offline).')
+        exit 1
     }
-    else {
-        Write-Host '  Package signed successfully' -ForegroundColor DarkGray
-    }
+    Write-Host '  Package signed successfully' -ForegroundColor DarkGray
 }
 
 $sizeMB = [math]::Round((Get-Item $msixOutput).Length / 1MB, 2)
