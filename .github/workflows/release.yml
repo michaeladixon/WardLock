@@ -114,7 +114,12 @@ jobs:
 
       - name: Package browser extensions
         shell: pwsh
-        run: .\BrowserExtension\package.ps1 -OutDir dist\extension -ZipPrefix 'WardLock_${{ steps.version.outputs.version }}'
+        run: |
+          .\BrowserExtension\package.ps1 -OutDir dist\extension -ZipPrefix 'WardLock_${{ steps.version.outputs.version }}'
+          # Release assets must sit at the workspace root: with mixed upload
+          # paths the artifact keeps directories, and the release job's
+          # WardLock_* globs only look at the root.
+          Move-Item dist\extension\*.zip .
 
       - name: Build loose zip (for browser-extension users)
         shell: pwsh
@@ -137,7 +142,7 @@ jobs:
           path: |
             WardLock_*_sideload.msix
             WardLock_*_win-x64.zip
-            dist/extension/WardLock_*-extension-*.zip
+            WardLock_*-extension-*.zip
           if-no-files-found: error
 
   release:

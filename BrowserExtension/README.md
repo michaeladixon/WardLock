@@ -29,7 +29,8 @@ and Firefox); no cloud, no phone, no account.
 
 ### How the two builds differ
 
-Chromium and Firefox share `background.js`, `popup.*`; only the manifest
+Chromium and Firefox share `shared.js` (native-messaging client, client ID,
+page fill function), `background.js` and `popup.*`; only the manifest
 differs (`package.ps1` assembles `dist\chromium` and `dist\firefox` and keeps
 the versions in sync):
 

@@ -7,9 +7,10 @@ branch + tag, and the tag drives everything else.
 
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`:
 restore → build with warnings as errors → unit tests (`tests/WardLock.Tests`)
-→ an unsigned Store-identity MSIX pack (catches manifest/packaging breakage on
-the PR, not on the release tag) → the loose win-x64 build uploaded as an
-artifact for testers. Dependabot (`.github/dependabot.yml`) opens weekly
+→ browser extensions packaged for Chromium and Firefox and the Firefox build
+checked with Mozilla's `addons-linter` → an unsigned Store-identity MSIX pack
+(catches manifest/packaging breakage on the PR, not on the release tag) → the
+loose win-x64 build and extension zips uploaded as artifacts for testers. Dependabot (`.github/dependabot.yml`) opens weekly
 grouped PRs for NuGet packages and GitHub Actions.
 
 ## Cutting a release
@@ -25,13 +26,16 @@ git push origin release/1.1.0 v1.1.0
 Pushing the tag triggers `.github/workflows/release.yml`:
 
 1. **build** — refuses tags whose commit isn't on a `release/*` branch, runs
-   the unit tests, then builds three artifacts from the tag (version `vX.Y.Z` → MSIX `X.Y.Z.0`;
+   the unit tests, then builds the release artifacts from the tag (version `vX.Y.Z` → MSIX `X.Y.Z.0`;
    the Store requires revision `0`, so tags are three-part only):
    - `WardLock_X.Y.Z.0_store.msix` — unsigned Store submission package
    - `WardLock_X.Y.Z.0_sideload.msix` — self-signed installer (only when the
      signing secrets are configured, see below)
    - `WardLock_X.Y.Z.0_win-x64.zip` — loose build, the install path for
      browser-extension users (MSIX installs can't host native messaging)
+   - `WardLock_X.Y.Z.0-extension-chromium.zip` / `-extension-firefox.zip` —
+     the browser extension (the Firefox build is unsigned; see
+     `BrowserExtension/README.md`)
 2. **release** — creates the GitHub Release on the tag with all artifacts,
    a `SHA256SUMS.txt`, and auto-generated notes. This is the versioned
    installer history.
