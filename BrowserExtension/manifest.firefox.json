@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "WardLock",
+  "version": "1.0.0",
+  "description": "Domain-verified TOTP fill from the WardLock desktop app. Local only - no cloud, no phone.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "wardlock@wardlock.app",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "permissions": ["nativeMessaging", "activeTab", "scripting", "storage"],
+  "background": {
+    "scripts": ["shared.js", "background.js"]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WardLock — fill code"
+  }
+}

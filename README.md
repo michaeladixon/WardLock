@@ -58,7 +58,7 @@ Press it anywhere, even with WardLock in the tray. WardLock reads the focused wi
 
 ### Browser fill — domain-verified, phishing-resistant
 
-A Chrome/Edge (MV3) extension delivers codes with one click — **and only on the real site**:
+A Chrome / Edge / Firefox (MV3) extension delivers codes with one click — **and only on the real site**:
 
 - Each account stores a **fill domain** (right-click → *Set Fill Domain…*, e.g. `github.com`).
 - The extension only offers a code when the page's hostname equals that domain or is a subdomain of it — matched at **label boundaries**, never substring. `github.com.evil.com` and `evilgithub.com` can never receive your GitHub code.
@@ -72,7 +72,7 @@ flowchart LR
     APP -. "code (verified domain only)" .-> EXT
 ```
 
-**Setup:** menu (≡) → **Enable Browser Integration**, then load [`BrowserExtension/`](BrowserExtension/README.md) unpacked at `chrome://extensions`. Not compatible with MSIX-installed builds yet (browsers can't launch executables inside `WindowsApps`) — use a loose build.
+**Setup:** menu (≡) → **Enable Browser Integration**, then load [`BrowserExtension/`](BrowserExtension/README.md) unpacked at `chrome://extensions` (Firefox: `about:debugging`, see the extension README). Not compatible with MSIX-installed builds yet (browsers can't launch executables inside `WindowsApps`) — use a loose build.
 
 ### Number-matched code release — MFA-fatigue armor, zero servers
 
@@ -152,7 +152,7 @@ Backups export the same way: AES-256-GCM, password-protected, one file.
 - **Secrets at rest** → Windows DPAPI, user-scoped, bound to your login
 - **Backups / vaults** → AES-256-GCM + PBKDF2-SHA256 (600k iterations)
 - **Global hotkeys** → Win32 `RegisterHotKey`; typing via `SendInput` (`KEYEVENTF_UNICODE`)
-- **Browser bridge** → Chrome native messaging (stdio) → named pipe (`CurrentUserOnly`)
+- **Browser bridge** → Chrome/Edge/Firefox native messaging (stdio) → named pipe (`CurrentUserOnly`)
 - **Audit chain** → SHA-256 hash-linked JSON lines, exclusive-lock appends
 - **QR** → [ZXing.NET](https://github.com/micjahn/ZXing.Net) + GDI+ screen capture
 - **Tray** → [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon)
@@ -214,7 +214,7 @@ Tagging `vX.Y.Z` on a `release/x.y.z` branch runs the [release workflow](.github
 WardLock/
 ├── Behaviors/
 │   └── DragDropReorder.cs            # ListBox drag-and-drop reordering
-├── BrowserExtension/                 # MV3 Chrome/Edge extension (load unpacked)
+├── BrowserExtension/                 # MV3 extension: Chrome/Edge (load unpacked) + Firefox (package.ps1)
 ├── Models/
 │   ├── AuthAccount.cs                # Account model (+ fill domain, Steam encoder)
 │   └── ExportPayload.cs              # Encrypted backup/vault format
@@ -257,8 +257,10 @@ WardLock/
 
 | Trace | Target |
 |---|---|
-| [#1](https://github.com/michaeladixon/WardLock/issues/1) | ~~Auto-type~~ ✓ · ~~Browser fill~~ ✓ · local number-matched release · Firefox port |
-| [#3](https://github.com/michaeladixon/WardLock/issues/3) | ~~Audit trail~~ ✓ · viewer roles · WNS push-approved code release with number matching |
+| [#1](https://github.com/michaeladixon/WardLock/issues/1) | ~~Auto-type~~ ✓ · ~~Browser fill~~ ✓ · ~~Local number-matched release~~ ✓ |
+| [#6](https://github.com/michaeladixon/WardLock/issues/6) | ~~Firefox port~~ ✓ · opt-in auto-fill on trusted domains |
+| [#3](https://github.com/michaeladixon/WardLock/issues/3) | ~~Audit trail~~ ✓ · ~~Viewer roles~~ ✓ |
+| [#7](https://github.com/michaeladixon/WardLock/issues/7) | WNS push-approved code release with number matching |
 | [#4](https://github.com/michaeladixon/WardLock/issues/4) | WardLock as an Entra ID External Authentication Method *(strategic, parked)* |
 | [#5](https://github.com/michaeladixon/WardLock/issues/5) | Subscription/entitlement rail on `api.wardlock.app` — personal TOTP stays free forever |
 

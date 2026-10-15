@@ -6,7 +6,7 @@ namespace WardLock.Services.BrowserBridge;
 
 /// <summary>
 /// Runs when the browser launches WardLock.exe as its native messaging host
-/// (detected by the chrome-extension:// origin argument Chrome/Edge pass).
+/// (detected from the launch arguments, see <see cref="DetectBrowserOrigin"/>).
 /// Relays framed messages between the browser (stdio) and the running WardLock
 /// instance (named pipe). No UI is shown in this mode.
 ///
@@ -16,6 +16,33 @@ namespace WardLock.Services.BrowserBridge;
 public static class NativeMessagingProxy
 {
     public const string PipeName = "WardLock.BrowserBridge";
+
+    /// <summary>
+    /// The calling extension's identity if WardLock.exe was launched as a native
+    /// messaging host, else null (normal GUI start).
+    /// <list type="bullet">
+    /// <item>Chrome/Edge on Windows pass <c>chrome-extension://&lt;id&gt;/</c> and
+    /// <c>--parent-window=&lt;hwnd&gt;</c>; the origin is used as-is.</item>
+    /// <item>Firefox passes the host manifest's path and the add-on ID; the ID
+    /// becomes <c>firefox:&lt;id&gt;</c> (moz-extension:// origins are per-install).</item>
+    /// </list>
+    /// The browser already restricted who may launch the host; the app re-checks
+    /// the identity against the installed manifests during the pipe handshake.
+    /// </summary>
+    public static string? DetectBrowserOrigin(IReadOnlyList<string> args)
+    {
+        var chromium = args.FirstOrDefault(
+            a => a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase));
+        if (chromium != null) return chromium;
+
+        if (args.Count >= 2
+            && args[0].EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(args[1])
+            && !args[1].StartsWith('-'))
+            return BrowserIntegrationInstaller.FirefoxOrigin(args[1].Trim());
+
+        return null;
+    }
 
     public static void Run(string origin)
     {

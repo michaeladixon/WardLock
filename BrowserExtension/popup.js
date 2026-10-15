@@ -3,48 +3,6 @@
 // The app is the security authority — it re-validates the domain and refuses
 // while locked; this popup is just UI.
 
-const HOST = "com.wardlock.wardlock";
-
-let port = null;
-const pending = []; // FIFO of resolvers — the host answers strictly in order
-
-function connect() {
-  port = chrome.runtime.connectNative(HOST);
-  port.onMessage.addListener((msg) => {
-    const resolve = pending.shift();
-    if (resolve) resolve(msg);
-  });
-  port.onDisconnect.addListener(() => {
-    // Capture Chrome's real reason (host not found / forbidden / exited) before it clears
-    const detail = chrome.runtime.lastError?.message || "";
-    port = null;
-    while (pending.length) pending.shift()({ ok: false, error: "native-disconnect", detail });
-  });
-}
-
-function request(msg) {
-  return new Promise((resolve) => {
-    if (!port) connect();
-    pending.push(resolve);
-    try {
-      port.postMessage(msg);
-    } catch (e) {
-      pending.pop();
-      resolve({ ok: false, error: "native-disconnect", detail: chrome.runtime.lastError?.message || "" });
-    }
-  });
-}
-
-// Random per-profile ID: lets the app force number-matched approval for the
-// first 24h after a new browser pairing. Self-asserted — hardening, not identity.
-async function getClientId() {
-  const stored = await chrome.storage.local.get("clientId");
-  if (stored.clientId) return stored.clientId;
-  const clientId = crypto.randomUUID();
-  await chrome.storage.local.set({ clientId });
-  return clientId;
-}
-
 const content = document.getElementById("content");
 const domainEl = document.getElementById("domain");
 
@@ -56,45 +14,6 @@ function esc(s) {
   const div = document.createElement("div");
   div.textContent = s ?? "";
   return div.innerHTML;
-}
-
-// Runs inside the page: finds a likely OTP input and fills it.
-// Uses the native value setter + input/change events so React/Vue forms notice.
-function fillCodeInPage(code, expectedHost) {
-  // The tab may have navigated since the request was made (approval can take
-  // up to ~75s): never fill a code into a different site.
-  if (location.hostname !== expectedHost) return false;
-
-  const isFillable = (el) =>
-    el instanceof HTMLInputElement &&
-    !el.disabled && !el.readOnly &&
-    ["text", "tel", "number", "password", ""].includes(el.type || "") &&
-    el.offsetParent !== null;
-
-  let target = isFillable(document.activeElement) ? document.activeElement : null;
-  if (!target) {
-    const selectors = [
-      'input[autocomplete="one-time-code"]',
-      'input[name*="otp" i]', 'input[id*="otp" i]',
-      'input[name*="totp" i]', 'input[name*="2fa" i]', 'input[id*="2fa" i]',
-      'input[name*="mfa" i]', 'input[id*="mfa" i]',
-      'input[name*="code" i]', 'input[id*="code" i]',
-      'input[name*="token" i]',
-      'input[inputmode="numeric"]',
-    ];
-    for (const sel of selectors) {
-      const el = [...document.querySelectorAll(sel)].find(isFillable);
-      if (el) { target = el; break; }
-    }
-  }
-  if (!target) return false;
-
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-  target.focus();
-  setter.call(target, code);
-  target.dispatchEvent(new Event("input", { bubbles: true }));
-  target.dispatchEvent(new Event("change", { bubbles: true }));
-  return true;
 }
 
 async function fill(tab, account, hostname) {
@@ -111,7 +30,7 @@ async function fill(tab, account, hostname) {
 
   let filled = false;
   try {
-    const results = await chrome.scripting.executeScript({
+    const results = await ext.scripting.executeScript({
       target: { tabId: tab.id },
       func: fillCodeInPage,
       args: [res.code, hostname],
@@ -147,9 +66,9 @@ function showChallenge(tab, res, hostname) {
      </div>`
   );
 
-  chrome.runtime.onMessage.addListener(function onUpdate(msg) {
+  ext.runtime.onMessage.addListener(function onUpdate(msg) {
     if (msg?.type !== "approval-update" || msg.challengeId !== res.challengeId) return;
-    chrome.runtime.onMessage.removeListener(onUpdate);
+    ext.runtime.onMessage.removeListener(onUpdate);
 
     switch (msg.status) {
       case "approved":
@@ -175,7 +94,7 @@ function showChallenge(tab, res, hostname) {
   });
 
   // The background worker polls and fills — it outlives this popup
-  chrome.runtime.sendMessage({ type: "await-approval", challengeId: res.challengeId, tabId: tab.id, hostname });
+  ext.runtime.sendMessage({ type: "await-approval", challengeId: res.challengeId, tabId: tab.id, hostname });
 }
 
 function friendlyError(res) {
@@ -190,11 +109,13 @@ function friendlyError(res) {
     case "origin-not-allowed": return "This extension isn't authorized. Re-enable browser integration in WardLock.";
     case "domain-mismatch": return "WardLock refused: account domain doesn't match this page.";
     case "native-disconnect":
-      // Surface Chrome's actual native-messaging failure reason
-      if (/not found/i.test(detail))
+      // Surface the browser's actual native-messaging failure reason
+      // (Chrome: "…not found" / "…forbidden"; Firefox: "No such native application …"
+      // / "…does not have permission to use native application …").
+      if (/not found|no such native application/i.test(detail))
         return "WardLock's browser host isn't registered. In WardLock: menu (≡) → Enable Browser Integration, then reopen this popup.";
-      if (/forbidden/i.test(detail))
-        return "This extension's ID isn't authorized for the WardLock host. Confirm the ID is hcbclfghekjpdgnbfnmfeaamigencjjf, then re-enable browser integration.";
+      if (/forbidden|does not have permission/i.test(detail))
+        return "This extension isn't authorized for the WardLock host. In WardLock: menu (≡) → Enable Browser Integration (registers Chrome, Edge and Firefox), then reopen this popup.";
       if (/exited|crashed/i.test(detail))
         return "WardLock's browser helper stopped. Make sure the WardLock app is running, then try again.";
       return "Can't reach WardLock. Make sure the app is running and browser integration is enabled." + (detail ? ` (${detail})` : "");
@@ -203,7 +124,7 @@ function friendlyError(res) {
 }
 
 async function init() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
   let hostname = null;
   try {
     const url = new URL(tab.url);
