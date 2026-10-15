@@ -75,13 +75,13 @@ public class MigrationDecoderTests
     [InlineData("Sv////8P")]          // field 9, length-delimited, length = 0xFFFFFFFF
     [InlineData("CgUBAg==")]          // otp_parameters claims 5 bytes, only 2 present
     [InlineData("CP////////////8B")]  // over-long varint
-    public void Hostile_payloads_fail_fast_instead_of_hanging(string b64)
+    public async Task Hostile_payloads_fail_fast_instead_of_hanging(string b64)
     {
         var uri = "otpauth-migration://offline?data=" + System.Uri.EscapeDataString(b64);
         var parse = Task.Run(() => GoogleAuthMigrationDecoder.ParseMigrationUri(uri));
 
-        Assert.True(Task.WhenAny(parse, Task.Delay(TimeSpan.FromSeconds(5))).Result == parse,
-            "decoder did not terminate on a malformed payload");
-        Assert.IsType<FormatException>(parse.Exception?.InnerException);
+        var finished = await Task.WhenAny(parse, Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.True(finished == parse, "decoder did not terminate on a malformed payload");
+        await Assert.ThrowsAsync<FormatException>(() => parse);
     }
 }
