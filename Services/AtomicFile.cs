@@ -5,9 +5,14 @@ namespace WardLock.Services;
 
 /// <summary>
 /// Crash-safe file replacement. The new content is written to a sibling temp
-/// file, flushed to disk, then renamed over the target, so a reader (or the
+/// file, flushed to disk, then swapped in for the target, so a reader (or the
 /// next launch after a crash, power loss, or dropped network share) sees
 /// either the old file or the new one — never a truncated one.
+///
+/// An existing target is swapped with File.Replace (ReplaceFile), which keeps
+/// its ACL, owner and attributes — important for a vault on a share whose
+/// file permissions an admin has tightened. Requires create permission in the
+/// folder and delete permission on the target.
 /// </summary>
 public static class AtomicFile
 {
@@ -63,7 +68,10 @@ public static class AtomicFile
         {
             try
             {
-                File.Move(source, destination, overwrite: true);
+                if (File.Exists(destination))
+                    File.Replace(source, destination, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                else
+                    File.Move(source, destination);
                 return;
             }
             catch (IOException) when (i < attempts)

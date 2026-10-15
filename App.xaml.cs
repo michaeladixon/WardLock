@@ -34,7 +34,22 @@ public partial class App : Application
         // settings.json (each save overwriting the other's changes), fail to
         // register the hotkeys, and race the first for the browser-bridge
         // pipe. Hand off to the running instance instead.
-        _instanceMutex = new Mutex(initiallyOwned: true, InstanceMutexName, out var createdNew);
+        bool createdNew;
+        try
+        {
+            _instanceMutex = new Mutex(initiallyOwned: true, InstanceMutexName, out createdNew);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The mutex exists but belongs to an elevated WardLock (its default
+            // DACL denies this medium-integrity process full access).
+            MessageBox.Show(
+                "WardLock is already running as administrator. Close it, then start WardLock normally — " +
+                "browser integration and hotkeys don't work across elevation levels.",
+                "WardLock", MessageBoxButton.OK, MessageBoxImage.Information);
+            Shutdown();
+            return;
+        }
         if (!createdNew)
         {
             try { using var activate = EventWaitHandle.OpenExisting(ActivateEventName); activate.Set(); }

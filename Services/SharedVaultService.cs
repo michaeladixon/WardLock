@@ -452,6 +452,12 @@ public class SharedVaultService : IDisposable
             // the previous vault intact instead of a truncated file.
             _lastWriteByUs = DateTime.UtcNow;
             AtomicFile.WriteAllText(FilePath, payloadJson);
+
+            // A replace raises Renamed/Created only. Teammates still on a
+            // release whose watcher filters LastWrite|Size would never reload
+            // and later overwrite this save with their stale list; touching the
+            // write time raises the LastWrite change they listen for.
+            File.SetLastWriteTimeUtc(FilePath, DateTime.UtcNow);
             _lastWriteByUs = DateTime.UtcNow;
         }
     }

@@ -101,6 +101,14 @@ the v1 format.
   as v1 **until** a viewer password is first set — no forced upgrade.
 - v2 requires all *members* to run a WardLock version that reads v2. Set the
   viewer password only after everyone has upgraded.
+- **Share permissions:** saves write a temp file next to the vault and swap it
+  in (`ReplaceFile`, which keeps the vault file's ACL and owner). Members who
+  save (admins) therefore need *create* permission in the vault's folder and
+  *delete* permission on the vault file, not just write access to the file.
+  Viewers append to the `.log` sidecar, so they need write access there.
+- **Mixed versions:** saves also touch the file's last-write time so that
+  clients from before atomic saves still notice and reload; upgrading every
+  member is still recommended.
 
 ## Honest limits (unchanged or accepted)
 
