@@ -8,6 +8,16 @@ const HOST = "com.wardlock.wardlock";
 
 let port = null;
 const pending = []; // FIFO of resolvers — the host answers strictly in order
+let activeApprovals = 0;
+
+// An open native port keeps the service worker (and a WardLock.exe proxy
+// process) alive indefinitely; release it once no approval is in flight.
+function releasePortIfIdle() {
+  if (activeApprovals > 0 || !port) return;
+  port.disconnect();
+  port = null;
+  while (pending.length) pending.shift()({ ok: false, error: "native-disconnect", detail: "" });
+}
 
 function connect() {
   port = chrome.runtime.connectNative(HOST);
@@ -47,7 +57,11 @@ async function getClientId() {
 
 // Runs inside the page: finds a likely OTP input and fills it.
 // (Duplicated from popup.js — MV3 offers no shared module for injected funcs.)
-function fillCodeInPage(code) {
+function fillCodeInPage(code, expectedHost) {
+  // The tab may have navigated since the request was made (approval can take
+  // up to ~75s): never fill a code into a different site.
+  if (location.hostname !== expectedHost) return false;
+
   const isFillable = (el) =>
     el instanceof HTMLInputElement &&
     !el.disabled && !el.readOnly &&
@@ -91,7 +105,17 @@ async function setBadge(text, color) {
   setTimeout(() => chrome.action.setBadgeText({ text: "" }), 6000);
 }
 
-async function awaitApproval({ challengeId, tabId }) {
+async function awaitApproval(handoff) {
+  activeApprovals++;
+  try {
+    await pollApproval(handoff);
+  } finally {
+    activeApprovals--;
+    releasePortIfIdle();
+  }
+}
+
+async function pollApproval({ challengeId, tabId, hostname }) {
   const client = await getClientId();
 
   // Poll for ~75s — the app's entry window is 60s plus pickup slack
@@ -115,7 +139,7 @@ async function awaitApproval({ challengeId, tabId }) {
         const results = await chrome.scripting.executeScript({
           target: { tabId },
           func: fillCodeInPage,
-          args: [res.code],
+          args: [res.code, hostname],
         });
         filled = results?.[0]?.result === true;
       } catch (e) {

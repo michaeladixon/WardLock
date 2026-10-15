@@ -189,10 +189,11 @@ public partial class MainViewModel : ObservableObject
         switch (ActiveLockMethod)
         {
             case LockMethod.WindowsHello:
-                if (await WindowsHelloService.VerifyAsync())
+                var hello = await WindowsHelloService.VerifyAsync();
+                if (hello.Verified)
                     Unlock();
                 else
-                    StatusMessage = "Verification failed. Try again.";
+                    StatusMessage = hello.Message;
                 break;
 
             case LockMethod.OAuthGoogle:
@@ -387,6 +388,7 @@ public partial class MainViewModel : ObservableObject
                 StatusMessage = $"Added {parsed.Issuer}";
             }
 
+            SecureClipboard.ClearIfText(input);
             OtpAuthInput = string.Empty;
             IsAddPanelVisible = false;
         }
@@ -952,6 +954,11 @@ public partial class MainViewModel : ObservableObject
 
         if (dlg.ShowDialog() == true)
         {
+            if (!IsUnlocked)
+            {
+                StatusMessage = "WardLock locked — export cancelled.";
+                return;
+            }
             try
             {
                 ExportImportService.Export(_store.Accounts, dlg.FileName, pwDialog.Password);
@@ -1009,19 +1016,28 @@ public partial class MainViewModel : ObservableObject
     private void MoveAccount(MoveArgs? args)
     {
         if (args == null) return;
-        var (from, to) = args;
-        if (from < 0 || from >= Accounts.Count || to < 0 || to >= Accounts.Count) return;
 
-        var fromVault = Accounts[from].VaultName;
-        var toVault = Accounts[to].VaultName;
-        if (fromVault != toVault) return;
+        // DragDropReorder reports positions in the ListBox, which shows the
+        // *filtered* view, and Accounts interleaves vault and personal rows in
+        // a different order than the store. Resolve both rows to objects and
+        // translate to each collection's own index.
+        var visible = FilteredAccountsView.Cast<AccountViewModel>().ToList();
+        var (viewFrom, viewTo) = args;
+        if (viewFrom < 0 || viewFrom >= visible.Count || viewTo < 0 || viewTo >= visible.Count) return;
 
-        if (fromVault == null)
+        var moving = visible[viewFrom];
+        var target = visible[viewTo];
+        if (moving.VaultName != target.VaultName) return;
+
+        if (moving.VaultName == null)
         {
-            _store.Move(from, to);
+            var storeFrom = _store.Accounts.FindIndex(a => a.Id == moving.Id);
+            var storeTo = _store.Accounts.FindIndex(a => a.Id == target.Id);
+            if (storeFrom < 0 || storeTo < 0) return;
+            _store.Move(storeFrom, storeTo);
         }
 
-        Accounts.Move(from, to);
+        Accounts.Move(Accounts.IndexOf(moving), Accounts.IndexOf(target));
     }
 
     // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -1059,8 +1075,12 @@ public partial class MainViewModel : ObservableObject
             StatusMessage = "Windows Hello is not available on this device.";
             return;
         }
-        if (!await WindowsHelloService.VerifyAsync("Verify to enable Windows Hello lock"))
+        var hello = await WindowsHelloService.VerifyAsync("Verify to enable Windows Hello lock");
+        if (!hello.Verified)
+        {
+            StatusMessage = hello.Message;
             return;
+        }
 
         ActiveLockMethod             = LockMethod.WindowsHello;
         AppSettings.ActiveLockMethod = LockMethod.WindowsHello;

@@ -177,10 +177,10 @@ public partial class MainViewModel
         if (_fillApproval.Pending == null) ClearApprovalBanner();
     }
 
-    /// <summary>Called from Lock(): a locked vault never keeps a live challenge.</summary>
+    /// <summary>Called from Lock(): a locked vault never keeps a live or approved challenge.</summary>
     private void CancelPendingApproval()
     {
-        _fillApproval.DenyPending("locked");
+        _fillApproval.RevokeAll("locked");
         ClearApprovalBanner();
     }
 

@@ -62,6 +62,10 @@ public partial class MainViewModel
                 return;
 
             account = picker.SelectedAccount;
+
+            // The idle lock can fire while the picker is open.
+            if (!IsUnlocked) return;
+
             if (!AutoTypeService.RestoreFocus(target))
             {
                 StatusMessage = "Couldn't refocus the target window. Code was not typed.";

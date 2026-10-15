@@ -123,6 +123,24 @@ public sealed class FillApprovalService
         return ApprovalAttemptResult.WrongNumber;
     }
 
+    /// <summary>
+    /// Deny the pending challenge and revoke any approved code the extension
+    /// hasn't picked up yet. Used on lock: nothing approved before a lock may be
+    /// released after it.
+    /// </summary>
+    public void RevokeAll(string reason)
+    {
+        DenyPending(reason);
+        foreach (var challenge in _finished)
+        {
+            if (challenge.Status == ChallengeStatus.Approved && !challenge.Consumed)
+            {
+                challenge.Status = ChallengeStatus.Denied;
+                challenge.DenyReason = reason;
+            }
+        }
+    }
+
     /// <summary>Deny the pending challenge (user clicked Deny, vault locked, …).</summary>
     public void DenyPending(string reason)
     {
