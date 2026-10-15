@@ -60,7 +60,11 @@ function esc(s) {
 
 // Runs inside the page: finds a likely OTP input and fills it.
 // Uses the native value setter + input/change events so React/Vue forms notice.
-function fillCodeInPage(code) {
+function fillCodeInPage(code, expectedHost) {
+  // The tab may have navigated since the request was made (approval can take
+  // up to ~75s): never fill a code into a different site.
+  if (location.hostname !== expectedHost) return false;
+
   const isFillable = (el) =>
     el instanceof HTMLInputElement &&
     !el.disabled && !el.readOnly &&
@@ -98,7 +102,7 @@ async function fill(tab, account, hostname) {
   const res = await request({ action: "fill-code", id: account.id, domain: hostname, client });
   if (!res.ok) {
     if (res.error === "approval-required") {
-      showChallenge(tab, res);
+      showChallenge(tab, res, hostname);
       return;
     }
     show(`<div class="message error">${esc(friendlyError(res))}</div>`);
@@ -110,7 +114,7 @@ async function fill(tab, account, hostname) {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: fillCodeInPage,
-      args: [res.code],
+      args: [res.code, hostname],
     });
     filled = results?.[0]?.result === true;
   } catch (e) {
@@ -135,7 +139,7 @@ async function fill(tab, account, hostname) {
 // types it into the WardLock window — out-of-band relative to this popup, so a
 // spoofed page or reflexive click can never release the code. The background
 // worker finishes the fill even if this popup closes when WardLock takes focus.
-function showChallenge(tab, res) {
+function showChallenge(tab, res, hostname) {
   show(
     `<div class="challenge">
        <div class="challenge-number">${esc(res.challenge)}</div>
@@ -171,7 +175,7 @@ function showChallenge(tab, res) {
   });
 
   // The background worker polls and fills — it outlives this popup
-  chrome.runtime.sendMessage({ type: "await-approval", challengeId: res.challengeId, tabId: tab.id });
+  chrome.runtime.sendMessage({ type: "await-approval", challengeId: res.challengeId, tabId: tab.id, hostname });
 }
 
 function friendlyError(res) {

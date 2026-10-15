@@ -82,6 +82,20 @@ public partial class MainViewModel
         _timer.Stop();
         CancelPendingApproval();
         Accounts.Clear();
+        SecureClipboard.ClearIfStillOurs();
+
+        // Dialogs opened while unlocked (auto-type picker, password prompts,
+        // audit log) hold account data and would act after their modal loop
+        // returns. Close every WPF window but the main one. Win32 file dialogs
+        // can't be closed from here, so commands that show them re-check
+        // IsUnlocked afterwards.
+        var app = System.Windows.Application.Current;
+        if (app != null)
+        {
+            foreach (var window in app.Windows.OfType<System.Windows.Window>().ToList())
+                if (!ReferenceEquals(window, app.MainWindow))
+                    window.Close();
+        }
         SearchText = string.Empty;
         IsUnlocked = false;
         StatusMessage = ActiveLockMethod switch

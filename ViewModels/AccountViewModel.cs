@@ -113,7 +113,7 @@ public partial class AccountViewModel : ObservableObject
     private async Task CopyToClipboard()
     {
         if (string.IsNullOrEmpty(CurrentCode)) return; // stale viewer window / decrypt failure
-        System.Windows.Clipboard.SetText(CurrentCode);
+        if (!WardLock.Services.SecureClipboard.TrySetText(CurrentCode)) return; // clipboard held by another app
         if (IsShared)
             SharedCodeCopied?.Invoke(this);
         JustCopied = true;

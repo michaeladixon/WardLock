@@ -19,10 +19,15 @@ public partial class MainWindow : Window
         DataContext = new MainViewModel();
         Loaded += OnLoaded;
 
-        // Track user activity for auto-lock
-        PreviewMouseMove += OnUserActivity;
-        PreviewKeyDown += OnUserActivity;
-        PreviewMouseDown += OnUserActivity;
+        // Track user activity for auto-lock in *every* WardLock window (dialogs
+        // included): Lock() closes secondary windows, so input there must count
+        // as activity. Class handlers live for the process, like this window.
+        EventManager.RegisterClassHandler(typeof(Window), PreviewMouseMoveEvent,
+            new System.Windows.Input.MouseEventHandler(OnUserActivity), handledEventsToo: true);
+        EventManager.RegisterClassHandler(typeof(Window), PreviewKeyDownEvent,
+            new System.Windows.Input.KeyEventHandler(OnUserActivity), handledEventsToo: true);
+        EventManager.RegisterClassHandler(typeof(Window), PreviewMouseDownEvent,
+            new System.Windows.Input.MouseButtonEventHandler(OnUserActivity), handledEventsToo: true);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -44,7 +49,7 @@ public partial class MainWindow : Window
 
     private void OnUserActivity(object sender, EventArgs e)
     {
-        ((MainViewModel)DataContext).ResetIdleTimer();
+        (DataContext as MainViewModel)?.ResetIdleTimer();
     }
 
     // ── Keyboard shortcuts ──

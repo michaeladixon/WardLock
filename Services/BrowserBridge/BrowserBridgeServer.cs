@@ -13,6 +13,8 @@ namespace WardLock.Services.BrowserBridge;
 /// </summary>
 public sealed class BrowserBridgeServer : IDisposable
 {
+    private static readonly TimeSpan HelloTimeout = TimeSpan.FromSeconds(5);
+
     private readonly Func<JsonDocument, object> _handleRequest;
     private readonly CancellationTokenSource _cts = new();
 
@@ -48,6 +50,16 @@ public sealed class BrowserBridgeServer : IDisposable
                 // transient pipe failure — retry accepting
                 await Task.Delay(250, CancellationToken.None);
             }
+            catch (Exception ex)
+            {
+                // e.g. UnauthorizedAccessException: the pipe name is owned by an
+                // elevated WardLock or another process. Previously this faulted
+                // the unobserved accept task and silently ended the bridge for
+                // the process lifetime; log and keep retrying instead.
+                ErrorLog.Write(ex);
+                try { await Task.Delay(TimeSpan.FromSeconds(5), ct); }
+                catch (OperationCanceledException) { break; }
+            }
             finally
             {
                 pipe?.Dispose();
@@ -61,7 +73,12 @@ public sealed class BrowserBridgeServer : IDisposable
         {
             try
             {
-                if (!Handshake(pipe)) return;
+                // A client that connects and never says hello would otherwise
+                // pin this thread forever: drop it after a few seconds.
+                using (new Timer(_ => pipe.Dispose(), null, HelloTimeout, Timeout.InfiniteTimeSpan))
+                {
+                    if (!Handshake(pipe)) return;
+                }
 
                 while (true)
                 {
@@ -91,9 +108,11 @@ public sealed class BrowserBridgeServer : IDisposable
     }
 
     /// <summary>
-    /// Validates the proxy's hello message. The browser already enforces
-    /// allowed_origins when launching the host; this repeats the check app-side
-    /// so a rogue local process can't skip it by talking to the pipe directly.
+    /// Validates the proxy's hello message. The browser enforces allowed_origins
+    /// when launching the host — that is the real authentication. The origin here
+    /// is self-asserted by whoever connects, so this is a consistency check that
+    /// rejects misconfigured or stale proxies; it does not stop a same-user process
+    /// that can already read the user's DPAPI-protected data anyway.
     /// </summary>
     private static bool Handshake(NamedPipeServerStream pipe)
     {

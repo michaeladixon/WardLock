@@ -55,8 +55,15 @@ public static class NativeMessagingProxy
                     {
                         pipe.Dispose();
                         pipe = null;
-                        NativeMessagingFraming.WriteMessage(stdout,
-                            new { ok = false, error = "app-not-running" });
+                        try
+                        {
+                            NativeMessagingFraming.WriteMessage(stdout,
+                                new { ok = false, error = "app-not-running" });
+                        }
+                        catch (IOException)
+                        {
+                            return; // browser already closed stdout — nothing to report to
+                        }
                     }
                 }
             }
