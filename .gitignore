@@ -366,3 +366,6 @@ FodyWeavers.xsd
 
 # Local codebase-index MCP server data
 .codebase-index/
+
+# Browser extension packaging output (BrowserExtension/package.ps1)
+BrowserExtension/dist/

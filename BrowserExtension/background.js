@@ -6,6 +6,10 @@
 
 const HOST = "com.wardlock.wardlock";
 
+// Firefox exposes promise-based APIs on `browser`; Chrome on `chrome` (and on
+// `browser` from Chrome 148). Use whichever exists so one script runs in both.
+const ext = globalThis.browser ?? globalThis.chrome;
+
 let port = null;
 const pending = []; // FIFO of resolvers — the host answers strictly in order
 let activeApprovals = 0;
@@ -20,13 +24,14 @@ function releasePortIfIdle() {
 }
 
 function connect() {
-  port = chrome.runtime.connectNative(HOST);
+  port = ext.runtime.connectNative(HOST);
   port.onMessage.addListener((msg) => {
     const resolve = pending.shift();
     if (resolve) resolve(msg);
   });
-  port.onDisconnect.addListener(() => {
-    const detail = chrome.runtime.lastError?.message || "";
+  port.onDisconnect.addListener((p) => {
+    // Firefox reports the reason on port.error, Chrome on runtime.lastError.
+    const detail = p?.error?.message || ext.runtime.lastError?.message || "";
     port = null;
     while (pending.length) pending.shift()({ ok: false, error: "native-disconnect", detail });
   });
@@ -40,7 +45,7 @@ function request(msg) {
       port.postMessage(msg);
     } catch (e) {
       pending.pop();
-      resolve({ ok: false, error: "native-disconnect", detail: chrome.runtime.lastError?.message || "" });
+      resolve({ ok: false, error: "native-disconnect", detail: ext.runtime.lastError?.message || "" });
     }
   });
 }
@@ -48,10 +53,10 @@ function request(msg) {
 // Random per-profile ID: lets the app force approval for the first 24h after
 // a new browser pairing. Self-asserted, so a hardening heuristic — not identity.
 async function getClientId() {
-  const stored = await chrome.storage.local.get("clientId");
+  const stored = await ext.storage.local.get("clientId");
   if (stored.clientId) return stored.clientId;
   const clientId = crypto.randomUUID();
-  await chrome.storage.local.set({ clientId });
+  await ext.storage.local.set({ clientId });
   return clientId;
 }
 
@@ -96,13 +101,13 @@ function fillCodeInPage(code, expectedHost) {
 
 function broadcast(update) {
   // Popup may be closed — ignore the "no receiver" rejection
-  chrome.runtime.sendMessage(update).catch(() => {});
+  ext.runtime.sendMessage(update).catch(() => {});
 }
 
 async function setBadge(text, color) {
-  await chrome.action.setBadgeBackgroundColor({ color });
-  await chrome.action.setBadgeText({ text });
-  setTimeout(() => chrome.action.setBadgeText({ text: "" }), 6000);
+  await ext.action.setBadgeBackgroundColor({ color });
+  await ext.action.setBadgeText({ text });
+  setTimeout(() => ext.action.setBadgeText({ text: "" }), 6000);
 }
 
 async function awaitApproval(handoff) {
@@ -136,7 +141,7 @@ async function pollApproval({ challengeId, tabId, hostname }) {
     if (res.status === "approved") {
       let filled = false;
       try {
-        const results = await chrome.scripting.executeScript({
+        const results = await ext.scripting.executeScript({
           target: { tabId },
           func: fillCodeInPage,
           args: [res.code, hostname],
@@ -160,6 +165,6 @@ async function pollApproval({ challengeId, tabId, hostname }) {
   broadcast({ type: "approval-update", challengeId, status: "expired" });
 }
 
-chrome.runtime.onMessage.addListener((msg) => {
+ext.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "await-approval") awaitApproval(msg);
 });

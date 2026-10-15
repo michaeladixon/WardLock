@@ -18,11 +18,10 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        // Chrome/Edge launch WardLock.exe as the extension's native messaging
-        // host, passing the extension origin as an argument. In that mode run
-        // as a headless stdio↔pipe relay to the real app instance — no UI.
-        var origin = e.Args.FirstOrDefault(
-            a => a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase));
+        // Chrome, Edge and Firefox launch WardLock.exe as the extension's native
+        // messaging host. In that mode run as a headless stdio↔pipe relay to the
+        // real app instance — no UI, and before the single-instance check.
+        var origin = NativeMessagingProxy.DetectBrowserOrigin(e.Args);
         if (origin != null)
         {
             NativeMessagingProxy.Run(origin); // blocks until the browser closes the port

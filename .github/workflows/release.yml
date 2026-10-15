@@ -112,6 +112,10 @@ jobs:
           .\build-msix.ps1 -SkipCert -SkipAssets -CertSubject $cert.Subject -Version '${{ steps.version.outputs.version }}'
           Rename-Item "WardLock_${{ steps.version.outputs.version }}.msix" "WardLock_${{ steps.version.outputs.version }}_sideload.msix"
 
+      - name: Package browser extensions
+        shell: pwsh
+        run: .\BrowserExtension\package.ps1 -OutDir dist\extension -ZipPrefix 'WardLock_${{ steps.version.outputs.version }}'
+
       - name: Build loose zip (for browser-extension users)
         shell: pwsh
         run: |
@@ -133,6 +137,7 @@ jobs:
           path: |
             WardLock_*_sideload.msix
             WardLock_*_win-x64.zip
+            dist/extension/WardLock_*-extension-*.zip
           if-no-files-found: error
 
   release:
@@ -160,8 +165,10 @@ jobs:
           body: |
             > **Sideload:** install the `_sideload.msix` (requires trusting the signing certificate once).
             > **Browser integration:** use the `_win-x64.zip` loose build — MSIX installs can't host the
-            > native-messaging bridge. The `_store.msix` is the unsigned Store submission package,
-            > attached for traceability. Verify downloads against `SHA256SUMS.txt`.
+            > native-messaging bridge. Extensions: `-extension-chromium.zip` (Chrome/Edge, load unpacked)
+            > and `-extension-firefox.zip` (Firefox 140+, unsigned — see BrowserExtension/README.md).
+            > The `_store.msix` is the unsigned Store submission package, attached for traceability.
+            > Verify downloads against `SHA256SUMS.txt`.
 
   store:
     needs: [build, release]

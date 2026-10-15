@@ -52,6 +52,22 @@ jobs:
           path: TestResults/*.trx
           if-no-files-found: ignore
 
+      - name: Package browser extensions (Chromium + Firefox)
+        shell: pwsh
+        run: .\BrowserExtension\package.ps1 -OutDir dist\extension
+
+      # Mozilla's validator (the one AMO runs); fails the build on errors.
+      - name: Lint Firefox extension
+        run: npx --yes addons-linter@10.13.0 dist/extension/firefox
+
+      - name: Upload browser extensions
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-extensions-${{ github.sha }}
+          path: dist/extension/*.zip
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Package smoke test (Store MSIX)
         shell: pwsh
         run: .\build-msix.ps1 -Store -SkipAssets -Version '0.0.${{ github.run_number }}.0'

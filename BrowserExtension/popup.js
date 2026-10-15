@@ -5,18 +5,23 @@
 
 const HOST = "com.wardlock.wardlock";
 
+// Firefox exposes promise-based APIs on `browser`; Chrome on `chrome` (and on
+// `browser` from Chrome 148). Use whichever exists so one script runs in both.
+const ext = globalThis.browser ?? globalThis.chrome;
+
 let port = null;
 const pending = []; // FIFO of resolvers — the host answers strictly in order
 
 function connect() {
-  port = chrome.runtime.connectNative(HOST);
+  port = ext.runtime.connectNative(HOST);
   port.onMessage.addListener((msg) => {
     const resolve = pending.shift();
     if (resolve) resolve(msg);
   });
-  port.onDisconnect.addListener(() => {
-    // Capture Chrome's real reason (host not found / forbidden / exited) before it clears
-    const detail = chrome.runtime.lastError?.message || "";
+  port.onDisconnect.addListener((p) => {
+    // Capture the browser's real reason (host not found / forbidden / exited):
+    // Firefox reports it on port.error, Chrome on runtime.lastError.
+    const detail = p?.error?.message || ext.runtime.lastError?.message || "";
     port = null;
     while (pending.length) pending.shift()({ ok: false, error: "native-disconnect", detail });
   });
@@ -30,7 +35,7 @@ function request(msg) {
       port.postMessage(msg);
     } catch (e) {
       pending.pop();
-      resolve({ ok: false, error: "native-disconnect", detail: chrome.runtime.lastError?.message || "" });
+      resolve({ ok: false, error: "native-disconnect", detail: ext.runtime.lastError?.message || "" });
     }
   });
 }
@@ -38,10 +43,10 @@ function request(msg) {
 // Random per-profile ID: lets the app force number-matched approval for the
 // first 24h after a new browser pairing. Self-asserted — hardening, not identity.
 async function getClientId() {
-  const stored = await chrome.storage.local.get("clientId");
+  const stored = await ext.storage.local.get("clientId");
   if (stored.clientId) return stored.clientId;
   const clientId = crypto.randomUUID();
-  await chrome.storage.local.set({ clientId });
+  await ext.storage.local.set({ clientId });
   return clientId;
 }
 
@@ -111,7 +116,7 @@ async function fill(tab, account, hostname) {
 
   let filled = false;
   try {
-    const results = await chrome.scripting.executeScript({
+    const results = await ext.scripting.executeScript({
       target: { tabId: tab.id },
       func: fillCodeInPage,
       args: [res.code, hostname],
@@ -147,9 +152,9 @@ function showChallenge(tab, res, hostname) {
      </div>`
   );
 
-  chrome.runtime.onMessage.addListener(function onUpdate(msg) {
+  ext.runtime.onMessage.addListener(function onUpdate(msg) {
     if (msg?.type !== "approval-update" || msg.challengeId !== res.challengeId) return;
-    chrome.runtime.onMessage.removeListener(onUpdate);
+    ext.runtime.onMessage.removeListener(onUpdate);
 
     switch (msg.status) {
       case "approved":
@@ -175,7 +180,7 @@ function showChallenge(tab, res, hostname) {
   });
 
   // The background worker polls and fills — it outlives this popup
-  chrome.runtime.sendMessage({ type: "await-approval", challengeId: res.challengeId, tabId: tab.id, hostname });
+  ext.runtime.sendMessage({ type: "await-approval", challengeId: res.challengeId, tabId: tab.id, hostname });
 }
 
 function friendlyError(res) {
@@ -190,11 +195,13 @@ function friendlyError(res) {
     case "origin-not-allowed": return "This extension isn't authorized. Re-enable browser integration in WardLock.";
     case "domain-mismatch": return "WardLock refused: account domain doesn't match this page.";
     case "native-disconnect":
-      // Surface Chrome's actual native-messaging failure reason
-      if (/not found/i.test(detail))
+      // Surface the browser's actual native-messaging failure reason
+      // (Chrome: "…not found" / "…forbidden"; Firefox: "No such native application …"
+      // / "…does not have permission to use native application …").
+      if (/not found|no such native application/i.test(detail))
         return "WardLock's browser host isn't registered. In WardLock: menu (≡) → Enable Browser Integration, then reopen this popup.";
-      if (/forbidden/i.test(detail))
-        return "This extension's ID isn't authorized for the WardLock host. Confirm the ID is hcbclfghekjpdgnbfnmfeaamigencjjf, then re-enable browser integration.";
+      if (/forbidden|does not have permission/i.test(detail))
+        return "This extension isn't authorized for the WardLock host. In WardLock: menu (≡) → Enable Browser Integration (registers Chrome, Edge and Firefox), then reopen this popup.";
       if (/exited|crashed/i.test(detail))
         return "WardLock's browser helper stopped. Make sure the WardLock app is running, then try again.";
       return "Can't reach WardLock. Make sure the app is running and browser integration is enabled." + (detail ? ` (${detail})` : "");
@@ -203,7 +210,7 @@ function friendlyError(res) {
 }
 
 async function init() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
   let hostname = null;
   try {
     const url = new URL(tab.url);
