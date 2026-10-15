@@ -2,14 +2,16 @@
 #
 # Flow: main is the development branch. To release, branch release/x.y.z from
 # main, tag it vX.Y.Z, and push branch + tag. The tag triggers this workflow:
-#   1. build   — MSIX store package, signed sideload package (if a signing
-#                cert is configured in secrets), and a loose zip for
-#                browser-extension users (MSIX can't host native messaging).
-#   2. release — GitHub Release on the tag with the installable artifacts.
-#   3. store   — publishes the store package to Partner Center via the
-#                Microsoft Store Developer CLI. Gated behind the
-#                "microsoft-store" environment so publishing stays a
-#                deliberate approval, not a side effect of tagging.
+#   1. build   — unit tests, then the MSIX store package, a signed sideload
+#                package (if a signing cert is configured in secrets), and a
+#                loose zip for browser-extension users (MSIX can't host
+#                native messaging).
+#   2. release — GitHub Release on the tag with the installable artifacts
+#                and SHA256SUMS.txt.
+#   3. store   — preflights the Partner Center credentials, then publishes
+#                the store package via the Microsoft Store Developer CLI.
+#                Gated behind the "microsoft-store" environment so publishing
+#                stays a deliberate approval, not a side effect of tagging.
 
 name: Release
 
@@ -18,16 +20,25 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 45
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout (full history for branch policy check)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -54,10 +65,13 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "MSIX version: $version"
 
-      - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@v4
+      - name: Setup .NET (from global.json)
+        uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
+
+      - name: Test
+        run: dotnet test WardLock.sln -c Release
 
       - name: Build Store MSIX (unsigned — Microsoft re-signs on upload)
         shell: pwsh
@@ -93,6 +107,8 @@ jobs:
           Remove-Item $pfxPath
           Write-Host "Signing as: $($cert.Subject)"
 
+          # build-msix.ps1 exits non-zero when signing fails, so an unsigned
+          # package can never ship under the _sideload name.
           .\build-msix.ps1 -SkipCert -SkipAssets -CertSubject $cert.Subject -Version '${{ steps.version.outputs.version }}'
           Rename-Item "WardLock_${{ steps.version.outputs.version }}.msix" "WardLock_${{ steps.version.outputs.version }}_sideload.msix"
 
@@ -104,14 +120,14 @@ jobs:
           Compress-Archive -Path bin\loose\* -DestinationPath "WardLock_${{ steps.version.outputs.version }}_win-x64.zip"
 
       - name: Upload store package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: store-msix
           path: WardLock_${{ steps.version.outputs.version }}_store.msix
           if-no-files-found: error
 
       - name: Upload release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-assets
           path: |
@@ -122,66 +138,134 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           merge-multiple: true
 
+      - name: Checksums
+        run: sha256sum WardLock_* | tee SHA256SUMS.txt
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           generate_release_notes: true
-          files: WardLock_*
+          fail_on_unmatched_files: true
+          files: |
+            WardLock_*
+            SHA256SUMS.txt
           body: |
             > **Sideload:** install the `_sideload.msix` (requires trusting the signing certificate once).
             > **Browser integration:** use the `_win-x64.zip` loose build — MSIX installs can't host the
             > native-messaging bridge. The `_store.msix` is the unsigned Store submission package,
-            > attached for traceability.
+            > attached for traceability. Verify downloads against `SHA256SUMS.txt`.
 
   store:
     needs: [build, release]
     runs-on: windows-latest
-    # Create this environment in Settings → Environments with required
-    # reviewers: tagging builds everything, but Store publishing waits for an
-    # explicit approval.
+    timeout-minutes: 30
+    # Settings → Environments → microsoft-store has required reviewers:
+    # tagging builds everything, but Store publishing waits for an approval.
     environment: microsoft-store
+    env:
+      # Secrets travel as env vars, never interpolated into script text.
+      AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+      SELLER_ID: ${{ secrets.SELLER_ID }}
+      AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+      AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+      STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
     steps:
       - name: Download store package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: store-msix
 
       - name: Check Partner Center secrets
         shell: pwsh
-        env:
-          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
-          SELLER_ID: ${{ secrets.SELLER_ID }}
-          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
-          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
-          STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
         run: |
           $required = 'AZURE_AD_TENANT_ID', 'SELLER_ID', 'AZURE_AD_APPLICATION_CLIENT_ID',
                       'AZURE_AD_APPLICATION_SECRET', 'STORE_PRODUCT_ID'
-          $missing = $required | Where-Object { [string]::IsNullOrEmpty((Get-Item "env:$_" -ErrorAction SilentlyContinue).Value) }
+          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace((Get-Item "env:$_" -ErrorAction SilentlyContinue).Value) }
           if ($missing) {
-            Write-Error "Missing repository secrets: $($missing -join ', '). See docs/releasing.md → One-time setup."
+            Write-Error "Missing secrets on the microsoft-store environment: $($missing -join ', '). See docs/releasing.md → One-time setup."
             exit 1
           }
 
+      # msstore only says "Really failed to auth". Ask Entra ID and the
+      # submission API directly so a failure names its actual cause.
+      - name: Preflight Partner Center access
+        shell: pwsh
+        run: |
+          $tokenBody = @{
+            grant_type    = 'client_credentials'
+            client_id     = $env:AZURE_AD_APPLICATION_CLIENT_ID.Trim()
+            client_secret = $env:AZURE_AD_APPLICATION_SECRET
+            resource      = 'https://manage.devcenter.microsoft.com'
+          }
+          try {
+            $token = Invoke-RestMethod -Method Post `
+              -Uri "https://login.microsoftonline.com/$($env:AZURE_AD_TENANT_ID.Trim())/oauth2/token" `
+              -ContentType 'application/x-www-form-urlencoded' -Body $tokenBody
+          } catch {
+            $err = $null
+            try { $err = $_.ErrorDetails.Message | ConvertFrom-Json } catch { }
+            $codes = @($err.error_codes)
+            $hint = switch ($codes) {
+              7000215 { 'AZURE_AD_APPLICATION_SECRET is not a valid secret for this app. Use the secret VALUE (shown once at creation), not the Secret ID.' }
+              7000222 { 'AZURE_AD_APPLICATION_SECRET has expired. Create a new client secret and update the environment secret.' }
+              700016  { 'AZURE_AD_APPLICATION_CLIENT_ID was not found in this tenant. Check the client ID and AZURE_AD_TENANT_ID.' }
+              90002   { 'AZURE_AD_TENANT_ID does not exist. Use the Directory (tenant) ID associated with Partner Center.' }
+              900023  { 'AZURE_AD_TENANT_ID is malformed. It must be the Directory (tenant) GUID.' }
+            }
+            Write-Host "Entra ID error: $($err.error) codes=[$($codes -join ',')]"
+            Write-Host $err.error_description
+            Write-Error "Could not obtain a Partner Center token. $hint"
+            exit 1
+          }
+          Write-Host 'Entra ID token: OK'
+
+          $headers = @{ Authorization = "Bearer $($token.access_token)" }
+          try {
+            $app = Invoke-RestMethod -Headers $headers `
+              -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$($env:STORE_PRODUCT_ID.Trim())"
+          } catch {
+            $status = [int]$_.Exception.Response.StatusCode
+            $hint = switch ($status) {
+              401 { 'The token was issued but Partner Center rejected it. Add this Entra app in Partner Center → Account settings → User management → Microsoft Entra applications with the Manager role, and make sure AZURE_AD_TENANT_ID is the tenant associated with the Partner Center account.' }
+              403 { 'The Entra app is known to Partner Center but lacks permission. Give it the Manager role.' }
+              404 { 'STORE_PRODUCT_ID was not found in this seller account. Use the Store ID from Partner Center → Product identity (9N…).' }
+              default { "Unexpected HTTP $status from the submission API." }
+            }
+            Write-Error "Partner Center API check failed (HTTP $status). $hint"
+            exit 1
+          }
+          Write-Host "Partner Center access: OK — '$($app.primaryName)' ($($app.packageIdentityName))"
+          if (-not $app.lastPublishedApplicationSubmission) {
+            Write-Error "'$($app.primaryName)' has no published submission yet. Microsoft requires the first submission to be completed in Partner Center; CI can publish updates after that."
+            exit 1
+          }
+          if ($app.pendingApplicationSubmission) {
+            Write-Host "::notice::A pending submission exists; msstore publish replaces the pending draft."
+          }
+
       - name: Setup Microsoft Store Developer CLI
-        uses: microsoft/microsoft-store-apppublisher@v1.1
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
 
       - name: Configure Partner Center credentials
         shell: pwsh
         run: |
           msstore reconfigure `
-            --tenantId ${{ secrets.AZURE_AD_TENANT_ID }} `
-            --sellerId ${{ secrets.SELLER_ID }} `
-            --clientId ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }} `
-            --clientSecret ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+            --tenantId $env:AZURE_AD_TENANT_ID `
+            --sellerId $env:SELLER_ID `
+            --clientId $env:AZURE_AD_APPLICATION_CLIENT_ID `
+            --clientSecret $env:AZURE_AD_APPLICATION_SECRET
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish to Microsoft Store
         shell: pwsh
         run: |
-          msstore publish "WardLock_${{ needs.build.outputs.version }}_store.msix" -id ${{ secrets.STORE_PRODUCT_ID }}
+          msstore publish "WardLock_${{ needs.build.outputs.version }}_store.msix" -id $env:STORE_PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -1,0 +1,71 @@
+# WardLock CI — every push to main and every pull request.
+#
+# Builds the app and tests, runs the unit tests, and assembles an (unsigned)
+# Store-identity MSIX so packaging regressions surface on the PR instead of
+# on the release tag. The loose build is uploaded as an artifact for testers.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET (from global.json)
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore WardLock.sln
+
+      - name: Build (warnings as errors)
+        run: dotnet build WardLock.sln -c Release --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test WardLock.sln -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+
+      - name: Package smoke test (Store MSIX)
+        shell: pwsh
+        run: .\build-msix.ps1 -Store -SkipAssets -Version '0.0.${{ github.run_number }}.0'
+
+      - name: Publish loose build
+        shell: pwsh
+        run: |
+          dotnet publish WardLock.csproj -c Release -r win-x64 --self-contained true -o bin\loose
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload loose build
+        uses: actions/upload-artifact@v7
+        with:
+          name: WardLock-win-x64-${{ github.sha }}
+          path: bin/loose/
+          retention-days: 14
+          if-no-files-found: error

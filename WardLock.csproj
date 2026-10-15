@@ -17,9 +17,10 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/michaeladixon/WardLock</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <SignAssembly>True</SignAssembly>
-    <AssemblyOriginatorKeyFile>WardLock.snk</AssemblyOriginatorKeyFile>
     <DefaultLanguage>en</DefaultLanguage>
+    <!-- The project sits at the repo root, so the SDK's default globs would
+         otherwise compile the test project's sources into the app. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
