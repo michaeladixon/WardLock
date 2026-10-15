@@ -4,14 +4,10 @@
 // the matching 2-digit number into WardLock. The app is the security authority —
 // the challenge is one-shot, time-boxed, and bound to this browser profile.
 
-const HOST = "com.wardlock.wardlock";
+// Chrome runs this file as a classic service worker; Firefox loads shared.js
+// first via manifest background.scripts.
+if (typeof importScripts === "function") importScripts("shared.js");
 
-// Firefox exposes promise-based APIs on `browser`; Chrome on `chrome` (and on
-// `browser` from Chrome 148). Use whichever exists so one script runs in both.
-const ext = globalThis.browser ?? globalThis.chrome;
-
-let port = null;
-const pending = []; // FIFO of resolvers — the host answers strictly in order
 let activeApprovals = 0;
 
 // An open native port keeps the service worker (and a WardLock.exe proxy
@@ -21,82 +17,6 @@ function releasePortIfIdle() {
   port.disconnect();
   port = null;
   while (pending.length) pending.shift()({ ok: false, error: "native-disconnect", detail: "" });
-}
-
-function connect() {
-  port = ext.runtime.connectNative(HOST);
-  port.onMessage.addListener((msg) => {
-    const resolve = pending.shift();
-    if (resolve) resolve(msg);
-  });
-  port.onDisconnect.addListener((p) => {
-    // Firefox reports the reason on port.error, Chrome on runtime.lastError.
-    const detail = p?.error?.message || ext.runtime.lastError?.message || "";
-    port = null;
-    while (pending.length) pending.shift()({ ok: false, error: "native-disconnect", detail });
-  });
-}
-
-function request(msg) {
-  return new Promise((resolve) => {
-    if (!port) connect();
-    pending.push(resolve);
-    try {
-      port.postMessage(msg);
-    } catch (e) {
-      pending.pop();
-      resolve({ ok: false, error: "native-disconnect", detail: ext.runtime.lastError?.message || "" });
-    }
-  });
-}
-
-// Random per-profile ID: lets the app force approval for the first 24h after
-// a new browser pairing. Self-asserted, so a hardening heuristic — not identity.
-async function getClientId() {
-  const stored = await ext.storage.local.get("clientId");
-  if (stored.clientId) return stored.clientId;
-  const clientId = crypto.randomUUID();
-  await ext.storage.local.set({ clientId });
-  return clientId;
-}
-
-// Runs inside the page: finds a likely OTP input and fills it.
-// (Duplicated from popup.js — MV3 offers no shared module for injected funcs.)
-function fillCodeInPage(code, expectedHost) {
-  // The tab may have navigated since the request was made (approval can take
-  // up to ~75s): never fill a code into a different site.
-  if (location.hostname !== expectedHost) return false;
-
-  const isFillable = (el) =>
-    el instanceof HTMLInputElement &&
-    !el.disabled && !el.readOnly &&
-    ["text", "tel", "number", "password", ""].includes(el.type || "") &&
-    el.offsetParent !== null;
-
-  let target = isFillable(document.activeElement) ? document.activeElement : null;
-  if (!target) {
-    const selectors = [
-      'input[autocomplete="one-time-code"]',
-      'input[name*="otp" i]', 'input[id*="otp" i]',
-      'input[name*="totp" i]', 'input[name*="2fa" i]', 'input[id*="2fa" i]',
-      'input[name*="mfa" i]', 'input[id*="mfa" i]',
-      'input[name*="code" i]', 'input[id*="code" i]',
-      'input[name*="token" i]',
-      'input[inputmode="numeric"]',
-    ];
-    for (const sel of selectors) {
-      const el = [...document.querySelectorAll(sel)].find(isFillable);
-      if (el) { target = el; break; }
-    }
-  }
-  if (!target) return false;
-
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-  target.focus();
-  setter.call(target, code);
-  target.dispatchEvent(new Event("input", { bubbles: true }));
-  target.dispatchEvent(new Event("change", { bubbles: true }));
-  return true;
 }
 
 function broadcast(update) {

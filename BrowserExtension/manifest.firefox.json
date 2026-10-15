@@ -14,7 +14,7 @@
   },
   "permissions": ["nativeMessaging", "activeTab", "scripting", "storage"],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["shared.js", "background.js"]
   },
   "action": {
     "default_popup": "popup.html",
