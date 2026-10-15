@@ -150,7 +150,7 @@ jobs:
         run: sha256sum WardLock_* | tee SHA256SUMS.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           generate_release_notes: true
           fail_on_unmatched_files: true
@@ -252,7 +252,7 @@ jobs:
           }
 
       - name: Setup Microsoft Store Developer CLI
-        uses: microsoft/microsoft-store-apppublisher@v1.4
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
 
       - name: Configure Partner Center credentials
         shell: pwsh
